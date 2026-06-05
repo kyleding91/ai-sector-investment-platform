@@ -44,7 +44,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (see PROGRESS.md) �
    - Add/remove/re-bucket a company without hand-editing companies.py.
    - Acceptance: adding a ticker seeds + pulls prices via the UI.
 
-8. `[~]` **Test + lint scaffolding** (`feat/tests-ci`)
+8. `[x]` **Test + lint scaffolding** (`feat/tests-ci`) — see PROGRESS.md
    - pytest smoke tests for endpoints + extraction; ruff config.
    - Acceptance: `pytest` green; `ruff check` clean.
 

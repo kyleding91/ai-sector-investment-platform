@@ -9,6 +9,22 @@ shipped · how it was verified. Review a feature with `git diff main..<branch>` 
 
 ---
 
+## 2026-06-05 · `feat/tests-ci` · pytest smoke tests + ruff config
+Added offline test + lint scaffolding (no network, no `ANTHROPIC_API_KEY`). New `pyproject.toml`
+configures **ruff** (E/F/W/I/B/UP; `E501` ignored — `companies.py` is a hand-aligned table) and
+**pytest** (`testpaths=tests`, quiet warnings). New `tests/` holds **23 tests**: `test_api.py`
+drives FastAPI's `TestClient` over health/companies/returns/metrics/filings/filing-insights with
+shape assertions always-on and data-dependent ones auto-skipped on an empty DB (`/api/snapshot`
+only hit with a bogus ticker so it stays offline); `test_extraction.py` covers `html_to_text`,
+`short_name`, `extract_mgmt_quotes`, `extract_self_description`, `_cagr`, `_fy_label`;
+`test_returns.py` checks `_ann_return` geometric math + insufficient-history `None`.
+`requirements-dev.txt` pins pytest + httpx + ruff. A few minor lint fixes make the tree clean:
+dropped an unused import (`filings.py`), modernized `typing.Iterable`→`collections.abc` (`edgar.py`),
+renamed an ambiguous `l` (`main.py`) and an unused loop var (`etl.py`).
+**Verified:** `ruff check .` → "All checks passed!"; `pytest` → **23 passed in 0.25s** (verbose run
+confirms none skipped against the populated DB).
+**Review:** `git diff main..feat/tests-ci` · `pip install -r requirements-dev.txt && pytest && ruff check .`
+
 ## 2026-06-05 · `feat/watchlist-admin` · Add/remove/re-bucket companies from the UI
 New `backend/watchlist.py` mutates the **live `companies` table** so the heat map can be curated
 without hand-editing `backend/companies.py` (edits persist in SQLite until the next
