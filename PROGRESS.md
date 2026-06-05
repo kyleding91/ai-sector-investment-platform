@@ -9,6 +9,20 @@ shipped · how it was verified. Review a feature with `git diff main..<branch>` 
 
 ---
 
+## 2026-06-05 · `feat/metric-sparklines` · Fundamentals trend sparklines on the deep-dive
+Added `get_series()` to `backend/metrics.py` — builds a per-year **revenue + gross/operating
+margin** series (oldest→newest, capped at the latest 10 FYs) from the merged multi-source
+`fundamentals`, computing margins per year and reporting in the statement currency. Exposed via
+new `GET /api/fundamentals/{ticker}` (`exists:false` when no facts). `frontend/panel.js` gains a
+reusable `sparklineSVG()` and a **"Fundamentals trend"** block — three compact inline sparklines
+(revenue, gross margin, operating margin) with the latest value and FY span; `index.html` +
+`stock.html` fetch it alongside the other panels. The block self-hides when a ticker has < 2 data
+points (non-filers, recent IPOs).
+**Verified:** `/api/fundamentals/NVDA` → FY2017→FY2026 with revenue + margins; TSM in **TWD** (10 pts),
+Samsung `005930` in **KRW** (4 pts, yfinance-only), unknown ticker → `exists:false`. panel.js
+syntax-clean (node --check); server restarted on :8010 to pick up the new module.
+**Review:** `git diff main..feat/metric-sparklines` · `curl :8010/api/fundamentals/NVDA` · open the NVDA deep-dive.
+
 ## 2026-06-05 · `feat/risk-insights` · Extractive "key risks in their own words"
 Added `extract_risk_factors()` to `backend/filing_insights.py` — pulls **3-5 verbatim risk-factor
 headlines** from each company's latest annual report (Item 1A in 10-Ks, Item 3.D in 20-Fs), no LLM.
