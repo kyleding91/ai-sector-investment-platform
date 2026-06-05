@@ -40,7 +40,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (see PROGRESS.md) �
    - Toggle return horizon (1Y/3Y/5Y) and sort within layers.
    - Acceptance: toggling re-colors without reload; sort works.
 
-7. `[~]` **Watchlist management UI** (`feat/watchlist-admin`)
+7. `[x]` **Watchlist management UI** (`feat/watchlist-admin`) — see PROGRESS.md
    - Add/remove/re-bucket a company without hand-editing companies.py.
    - Acceptance: adding a ticker seeds + pulls prices via the UI.
 

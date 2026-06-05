@@ -9,6 +9,25 @@ shipped · how it was verified. Review a feature with `git diff main..<branch>` 
 
 ---
 
+## 2026-06-05 · `feat/watchlist-admin` · Add/remove/re-bucket companies from the UI
+New `backend/watchlist.py` mutates the **live `companies` table** so the heat map can be curated
+without hand-editing `backend/companies.py` (edits persist in SQLite until the next
+`python -m backend.seed`). Adding a company also pulls ~11Y of prices via the ETL so the new row
+appears immediately. Endpoints in `main.py`: `GET /api/segments`, `POST /api/watchlist` (add +
+validate segment/dupes + pull prices), `PATCH /api/watchlist/{ticker}` (re-bucket → updates layer),
+`DELETE /api/watchlist/{ticker}` (remove company + prices/metrics/facts). `_company_meta` now reads
+the DB (not the seed list) so runtime-added tickers resolve for `/api/snapshot`; CORS broadened to
+allow POST/PATCH/DELETE. `frontend/index.html` gains a **"⚙ Manage watchlist"** modal — an add form
+(ticker/yahoo/name/segment dropdown/notes) plus a current-watchlist list with per-row re-bucket
+`<select>` and Remove button; benchmarks (SOX/SP500TR) are hidden + server-protected. CLI:
+`python -m backend.watchlist list|add|rebucket|remove`.
+**Verified** end-to-end on :8010 — added **QCOM** via `POST /api/watchlist` → **2766 price rows**
+pulled, appeared in `/api/returns` (layer 7) and `/api/snapshot` (DB-backed meta); duplicate add and
+bad segment → 400; `PATCH` re-bucketed QCOM to layer 1; `DELETE SOX` → 400 (protected); `DELETE QCOM`
+removed 2766 prices + the row, returns back to 38. Browser (Claude Preview): modal opens, 9 segment
+options, 38 mutable rows (benchmarks excluded), screenshot confirms layout. DB left clean.
+**Review:** `git diff main..feat/watchlist-admin` · open http://127.0.0.1:8010/ → "Manage watchlist".
+
 ## 2026-06-05 · `feat/heatmap-ux` · Heat-map horizon focus toggle (re-colors without reload)
 Added a **"Focus horizon"** selector to the heat-map controls in `frontend/index.html`. Picking a
 horizon (1Y/3Y/5Y/10Y) emphasizes that single return column — a ring on each value cell plus a
