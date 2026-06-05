@@ -9,6 +9,21 @@ shipped · how it was verified. Review a feature with `git diff main..<branch>` 
 
 ---
 
+## 2026-06-05 · `feat/risk-insights` · Extractive "key risks in their own words"
+Added `extract_risk_factors()` to `backend/filing_insights.py` — pulls **3-5 verbatim risk-factor
+headlines** from each company's latest annual report (Item 1A in 10-Ks, Item 3.D in 20-Fs), no LLM.
+Two strategies: (1) the company's own **risk-summary list** — `Risk Factors Summary` bullets (NVDA,
+AMD, MU…) or the `Overview of risk factors` table (ASML, ARM, GFS) — preferred when it yields ≥3;
+(2) a **section-body fallback** that harvests the bold risk sub-headings (short sentence-paragraph
+followed by a long explanatory paragraph) for filers without a summary (TXN, AMAT, CSCO, MRVL, ADI,
+UMC). Filters category headers, page chrome, risk-type column labels, and boilerplate. New
+`risk_factors` field flows through `content_json` → `/api/filing-insights/{ticker}`; panel.js renders
+an amber **"Key risks, in their words"** block linking back to the filing on EDGAR.
+**Verified:** full run = 36 filers; **NVDA & ASML each show 5 verbatim risk bullets** with working
+EDGAR links; 30/36 yield 5 risks, the rest (INTC/TSM/LRCX/DELL/AMZN) degrade gracefully to none.
+`/api/filing-insights/NVDA` & `/ASML` return `risk_factors` + `source_url`; panel.js syntax-clean.
+**Review:** `git diff main..feat/risk-insights` · `python -m backend.filing_insights show NVDA` · open NVDA deep-dive.
+
 ## 2026-06-05 · `feat/fx-normalize` · USD normalization for foreign filers
 Added `backend/fx.py` — fetches **spot FX rates** (`XXXUSD=X` via yfinance) into a new
 `fx_rates` table, and an idempotent `db.py` column migration so `company_metrics` carries
