@@ -75,6 +75,16 @@
     </label>
   </div>
 
+  <div class="mb-4">
+    <div class="relative max-w-2xl">
+      <input id="filing-search" type="search" autocomplete="off"
+             placeholder="Search the SEC filings corpus — e.g. HBM, foundry capacity, AI accelerators…"
+             class="w-full px-3 py-2 border rounded text-sm" />
+      <span id="search-spinner" class="absolute right-3 top-2 text-xs text-gray-400 hidden">…</span>
+    </div>
+    <div id="search-results" class="mt-2 hidden border rounded bg-white divide-y max-w-2xl max-h-96 overflow-y-auto shadow-sm"></div>
+  </div>
+
   <div id="status" class="text-sm text-gray-500">Loading…</div>
   <div id="grid"></div>
 
@@ -310,6 +320,80 @@
 
   document.getElementById('sort-by').addEventListener('change', rerender);
   document.getElementById('color-mode').addEventListener('change', rerender);
+
+  // ---------- full-text filing search ----------
+  function highlightSnippet(snip) {
+    // content is plain text; escape it, then re-enable our own <mark> wrappers.
+    return escapeHtml(snip || '')
+      .replace(/&lt;mark&gt;/g, '<mark class="bg-yellow-200">')
+      .replace(/&lt;\/mark&gt;/g, '</mark>');
+  }
+  function metaForTicker(ticker) {
+    const row = (CACHED && CACHED.data || []).find(r => r.ticker === ticker);
+    return row ? { name: row.name, segment: row.segment } : { name: '', segment: '' };
+  }
+  const searchBox = document.getElementById('filing-search');
+  const searchResults = document.getElementById('search-results');
+  const searchSpinner = document.getElementById('search-spinner');
+  let searchTimer = null;
+  let searchSeq = 0;
+
+  function renderSearchResults(payload) {
+    const { results, count } = payload;
+    if (!results || !results.length) {
+      searchResults.innerHTML = `<div class="px-3 py-2 text-sm text-gray-500">No matches in the filings corpus.</div>`;
+      searchResults.classList.remove('hidden');
+      return;
+    }
+    searchResults.innerHTML = results.map((h, i) => {
+      const m = metaForTicker(h.ticker);
+      const kind = h.doc_kind && h.doc_kind !== 'primary' ? ` · ${escapeHtml(h.doc_kind)}` : '';
+      return `<div class="px-3 py-2 hover:bg-gray-50 cursor-pointer" data-idx="${i}">
+        <div class="flex items-center justify-between gap-2">
+          <div class="text-sm font-semibold text-blue-700">${escapeHtml(h.ticker)}
+            <span class="font-normal text-gray-500">${escapeHtml(m.name)}</span></div>
+          <div class="text-xs text-gray-400 whitespace-nowrap">${escapeHtml(h.form)} · ${escapeHtml(h.period_end || '')}${kind}</div>
+        </div>
+        <div class="text-xs text-gray-600 mt-0.5">${highlightSnippet(h.snippet)}</div>
+        <a href="${escapeHtml(h.url)}" target="_blank" rel="noopener"
+           class="text-xs text-blue-600 hover:underline" onclick="event.stopPropagation()">View on SEC EDGAR ↗</a>
+      </div>`;
+    }).join('') + (count >= 25 ? `<div class="px-3 py-1 text-xs text-gray-400">Showing top 25 — refine your query for fewer.</div>` : '');
+    searchResults.classList.remove('hidden');
+    searchResults.querySelectorAll('[data-idx]').forEach(el => {
+      el.addEventListener('click', () => {
+        const h = results[+el.dataset.idx];
+        const m = metaForTicker(h.ticker);
+        openStockPanel(h.ticker, m.name, m.segment);
+      });
+    });
+  }
+
+  async function runSearch(q) {
+    const seq = ++searchSeq;
+    searchSpinner.classList.remove('hidden');
+    try {
+      const res = await fetch(apiUrl('/api/search?q=' + encodeURIComponent(q) + '&limit=25')).then(r => r.json());
+      if (seq !== searchSeq) return; // a newer query superseded this one
+      renderSearchResults(res);
+    } catch (e) {
+      searchResults.innerHTML = `<div class="px-3 py-2 text-sm text-red-600">Search failed: ${escapeHtml(e.message)}</div>`;
+      searchResults.classList.remove('hidden');
+    } finally {
+      if (seq === searchSeq) searchSpinner.classList.add('hidden');
+    }
+  }
+
+  searchBox.addEventListener('input', () => {
+    const q = searchBox.value.trim();
+    clearTimeout(searchTimer);
+    if (q.length < 2) { searchResults.classList.add('hidden'); searchResults.innerHTML = ''; return; }
+    searchTimer = setTimeout(() => runSearch(q), 250);
+  });
+  document.addEventListener('click', (e) => {
+    if (!searchResults.contains(e.target) && e.target !== searchBox) searchResults.classList.add('hidden');
+  });
+
   load();
 </script>
 </body>
