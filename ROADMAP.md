@@ -15,7 +15,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (see PROGRESS.md) �
 
 ## Priority backlog (offline-friendly first)
 
-1. `[~]` **Full-text filing search** (`feat/filing-search`)
+1. `[x]` **Full-text filing search** (`feat/filing-search`) — see PROGRESS.md
    - Index the on-disk `filings/` corpus (SQLite FTS5) and add `/api/search?q=`.
    - Frontend: a search box returning snippet + ticker + link to the SEC EDGAR doc.
    - Acceptance: query "HBM" returns MU/SK-relevant hits with working EDGAR links.
