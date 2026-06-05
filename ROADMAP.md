@@ -28,7 +28,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (see PROGRESS.md) �
    - Convert TWD/KRW/EUR revenue to USD using a stored FX rate; show both.
    - Acceptance: TSM revenue shows USD + TWD; caveat text updated.
 
-4. `[ ]` **Extractive "key risks in their own words"** (`feat/risk-insights`)
+4. `[~]` **Extractive "key risks in their own words"** (`feat/risk-insights`)
    - New extractive block from Item 1A (10-K) / Item 3.D (20-F), like filing_insights.
    - Acceptance: NVDA/ASML show 3-5 verbatim risk bullets linking to EDGAR.
 
