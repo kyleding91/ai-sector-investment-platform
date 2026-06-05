@@ -134,6 +134,21 @@ filings/   <TICKER>/<TYPE>/<period>/  downloaded SEC filings (gitignored)
 | `/api/insights/stock/{ticker}` | latest `StockPanel` insight, or `{exists:false}` |
 | `/api/filings/{ticker}` | list of downloaded SEC filings (newest-first), or empty for non-filers |
 | `/api/filing-insights/{ticker}` | extractive "in their own words" insights from on-disk filings, or `{exists:false}` |
+| `GET /api/segments` | value-chain segments available for bucketing (for the admin UI) |
+| `POST /api/watchlist` | add a company (`{ticker,name,segment,yahoo_ticker?,notes?}`) and pull its prices |
+| `PATCH /api/watchlist/{ticker}` | re-bucket a company to another segment (`{segment}`) |
+| `DELETE /api/watchlist/{ticker}` | remove a company + its prices/metrics/facts |
+
+### Watchlist administration
+
+The heat map can be curated from the UI — click **⚙ Manage watchlist** (top-right of
+the controls). Adding a company inserts it into the live `companies` table and pulls
+~11Y of price history immediately, so the new row appears on the heat map without a
+reload; re-bucketing changes its value-chain layer; removing also deletes its prices.
+Benchmarks (SOX/SP500TR) are protected. These edits live in SQLite and persist until
+the next `python -m backend.seed`, which re-applies the seed list in
+`backend/companies.py` (still the canonical, version-controlled source). CLI equivalent:
+`python -m backend.watchlist list|add|rebucket|remove`.
 
 ## Data sources & freshness
 
