@@ -32,7 +32,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (see PROGRESS.md) �
    - New extractive block from Item 1A (10-K) / Item 3.D (20-F), like filing_insights.
    - Acceptance: NVDA/ASML show 3-5 verbatim risk bullets linking to EDGAR.
 
-5. `[ ]` **Fundamentals sparklines on deep-dive** (`feat/metric-sparklines`)
+5. `[~]` **Fundamentals sparklines on deep-dive** (`feat/metric-sparklines`)
    - Small revenue/margin trend charts on stock.html from `fundamentals`.
    - Acceptance: NVDA shows a multi-year revenue sparkline.
 
