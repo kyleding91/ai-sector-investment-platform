@@ -20,7 +20,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (see PROGRESS.md) �
    - Frontend: a search box returning snippet + ticker + link to the SEC EDGAR doc.
    - Acceptance: query "HBM" returns MU/SK-relevant hits with working EDGAR links.
 
-2. `[ ]` **EDGAR XBRL fundamentals (second source)** (`feat/xbrl-fundamentals`)
+2. `[~]` **EDGAR XBRL fundamentals (second source)** (`feat/xbrl-fundamentals`)
    - Pull SEC `companyfacts` API into `fundamentals` tagged `source='xbrl'` alongside yfinance.
    - Acceptance: NVDA revenue from XBRL matches yfinance within rounding; UI shows source.
 
