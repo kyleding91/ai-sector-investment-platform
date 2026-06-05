@@ -253,9 +253,10 @@
     setPopout(ticker);
     const body = document.getElementById('panel-body');
     try {
-      const [snap, metrics, insight, filingInsights, filingsJson] = await Promise.all([
+      const [snap, metrics, fundamentals, insight, filingInsights, filingsJson] = await Promise.all([
         fetch(apiUrl('/api/snapshot/' + encodeURIComponent(ticker))).then(r => r.json()),
         fetch(apiUrl('/api/metrics/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
+        fetch(apiUrl('/api/fundamentals/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
         fetch(apiUrl('/api/insights/stock/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
         fetch(apiUrl('/api/filing-insights/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
         fetch(apiUrl('/api/filings/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => ({ filings: [] })),
@@ -267,6 +268,7 @@
         heatRow,
         primaryBenchmark: CACHED ? CACHED.primary_benchmark : null,
         metrics,
+        fundamentals,
         insight,
         filingInsights,
         filings: (filingsJson && filingsJson.filings) || [],

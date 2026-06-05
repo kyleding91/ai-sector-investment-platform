@@ -31,11 +31,12 @@
     if (!ticker) { body.innerHTML = '<div class="text-sm text-red-600">No ?ticker= specified.</div>'; return; }
     document.title = `AI Sector — ${ticker}`;
     try {
-      const [snap, returnsJson, companiesJson, metrics, insight, filingInsights, filingsJson] = await Promise.all([
+      const [snap, returnsJson, companiesJson, metrics, fundamentals, insight, filingInsights, filingsJson] = await Promise.all([
         fetch(apiUrl('/api/snapshot/' + encodeURIComponent(ticker))).then(r => r.json()),
         fetch(apiUrl('/api/returns')).then(r => r.json()),
         fetch(apiUrl('/api/companies')).then(r => r.json()).catch(() => ({ companies: [] })),
         fetch(apiUrl('/api/metrics/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
+        fetch(apiUrl('/api/fundamentals/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
         fetch(apiUrl('/api/insights/stock/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
         fetch(apiUrl('/api/filing-insights/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
         fetch(apiUrl('/api/filings/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => ({ filings: [] })),
@@ -52,6 +53,7 @@
         heatRow,
         primaryBenchmark: returnsJson.primary_benchmark,
         metrics,
+        fundamentals,
         insight,
         filingInsights,
         filings: (filingsJson && filingsJson.filings) || [],

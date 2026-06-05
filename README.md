@@ -131,6 +131,7 @@ filings/   <TICKER>/<TYPE>/<period>/  downloaded SEC filings (gitignored)
 | Endpoint | Returns |
 |---|---|
 | `/api/metrics/{ticker}` | derived revenue/margin/CAGR + `financial_currency`, or `{exists:false}` |
+| `/api/fundamentals/{ticker}` | per-year revenue + gross/operating-margin series (oldest→newest) for deep-dive sparklines, or `{exists:false}` |
 | `/api/insights/stock/{ticker}` | latest `StockPanel` insight, or `{exists:false}` |
 | `/api/filings/{ticker}` | list of downloaded SEC filings (newest-first), or empty for non-filers |
 | `/api/filing-insights/{ticker}` | extractive "in their own words" insights from on-disk filings, or `{exists:false}` |

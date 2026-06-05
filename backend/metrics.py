@@ -209,6 +209,38 @@ def get_metrics(ticker: str) -> dict | None:
     }
 
 
+def get_series(ticker: str, years: int = 10) -> dict:
+    """Per-year fundamentals series for the deep-dive sparklines: revenue plus
+    gross/operating margins, oldest→newest. Margins are computed only for years
+    that have both numerator and revenue; revenue is in the reporting currency."""
+    facts = _facts_by_concept(ticker)
+    rev = dict(facts.get("Revenue", []))
+    gp = dict(facts.get("GrossProfit", []))
+    op = dict(facts.get("OperatingIncome", []))
+    ni = dict(facts.get("NetIncome", []))
+    # Most recent `years` fiscal periods that have a revenue figure, oldest first.
+    periods = sorted(rev.keys(), reverse=True)[:years][::-1]
+    points = []
+    for p in periods:
+        r = rev.get(p)
+        if r is None or r == 0:
+            continue
+        gm = (gp[p] / r) if p in gp else None
+        op_v = op.get(p)
+        om = (op_v / r) if op_v is not None else ((ni[p] / r) if p in ni else None)
+        points.append({
+            "period": _fy_label(p),
+            "revenue": r,
+            "gross_margin": gm,
+            "operating_margin": om,
+        })
+    return {
+        "ticker": ticker,
+        "currency": _financial_currency(ticker),
+        "points": points,
+    }
+
+
 def refresh(filter_tickers: list[str] | None = None) -> None:
     if filter_tickers:
         wanted = {t.upper() for t in filter_tickers}
