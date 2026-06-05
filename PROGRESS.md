@@ -9,6 +9,18 @@ shipped · how it was verified. Review a feature with `git diff main..<branch>` 
 
 ---
 
+## 2026-06-05 · `feat/fx-normalize` · USD normalization for foreign filers
+Added `backend/fx.py` — fetches **spot FX rates** (`XXXUSD=X` via yfinance) into a new
+`fx_rates` table, and an idempotent `db.py` column migration so `company_metrics` carries
+`revenue_latest_usd` / `fx_rate` / `fx_rate_asof`. `metrics.py` converts non-USD revenue
+(TWD/KRW/EUR) at the stored rate; the deep-dive panel shows **native + ≈USD** with a caveat that
+the USD figure is a spot conversion (not a fiscal-year-average reported number). Margins/CAGRs
+stay currency-neutral. CLI: `python -m backend.fx refresh|show`.
+**Verified:** rates EUR 1.162, KRW 0.000647, TWD 0.03176 (2026-06-05); conversions check out —
+TSM NT$3.81T → ≈$121.0B, ASML €32.7B → ≈$38.0B, Samsung ₩333.6T → ≈$215.9B, NVDA USD identity.
+`/api/metrics/TSM` returns native + usd + fx_rate + fx_rate_asof; panel.js syntax-clean.
+**Review:** `git diff main..feat/fx-normalize` · `python -m backend.fx show` · open TSM deep-dive.
+
 ## 2026-06-04 · `feat/xbrl-fundamentals` · EDGAR XBRL fundamentals (authoritative 2nd source)
 Added `backend/xbrl.py` — pulls the SEC **`companyfacts`** API into the shared `fundamentals`
 table tagged `source='edgar_xbrl'`, which `metrics.py` already prioritizes over yfinance. Maps
