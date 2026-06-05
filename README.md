@@ -33,7 +33,8 @@ pip install -r requirements.txt
 python -m backend.seed                    # companies.py -> SQLite
 python -m backend.etl refresh             # ~11Y of daily closes from Yahoo (~1 min)
 python -m backend.fundamentals refresh all  # income-statement facts from yfinance
-python -m backend.metrics refresh all     # derive revenue/margin/CAGR rollups
+python -m backend.fx refresh                # spot FX rates (TWD/KRW/EUR → USD) for foreign filers
+python -m backend.metrics refresh all     # derive revenue/margin/CAGR rollups (+ USD-normalized revenue)
 python -m scripts.seed_insights           # hand-seeded illustrative deep-dive panels
 
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8010
@@ -119,7 +120,7 @@ Claude with web search to produce schema-validated `StockPanel` deep dives.
 
 ```
 backend/   companies.py · db.py · seed.py · etl.py · returns.py · fundamentals.py ·
-           metrics.py · insights.py · edgar.py · filings.py · filing_insights.py · main.py
+           fx.py · metrics.py · insights.py · edgar.py · filings.py · filing_insights.py · main.py
 frontend/  index.html · stock.html · panel.js
 scripts/   seed_insights.py   (hand-seeded illustrative panels)
 data/      ai_stocks.db   (gitignored)
@@ -142,6 +143,7 @@ filings/   <TICKER>/<TYPE>/<period>/  downloaded SEC filings (gitignored)
 | Daily adjusted closes (heat map, return math, 5Y chart) | yfinance → local `prices` | `python -m backend.etl refresh` |
 | Market cap / P/E / dividend yield | live yfinance call per `/api/snapshot/{ticker}` | live (Yahoo retail tier 15+ min delayed) |
 | Income-statement facts (revenue, margins, EPS) | yfinance `financials` → local `fundamentals` | `python -m backend.fundamentals refresh all` |
+| Spot FX rates (foreign-filer USD normalization) | yfinance `XXXUSD=X` → local `fx_rates` | `python -m backend.fx refresh` |
 | Derived metrics (margin, CAGR, key metric) | computed from `fundamentals` → `company_metrics` | `python -m backend.metrics refresh all` |
 | Stock deep-dive insight panels | Claude API (web search) → `insights` | `python -m backend.insights refresh all` |
 | SEC filings (10-K/10-Q/8-K, 20-F/6-K) | SEC EDGAR → `filings/` + `filings` table | `python -m backend.filings refresh all` |
@@ -157,10 +159,13 @@ Nothing auto-updates. The "last refreshed" timestamp shows in the heat-map heade
   dividend-adjusted (total-return) closes. Semis pay small dividends, so the bias is minor, but
   comparisons are not strictly apples-to-apples.
 - **Recent IPOs** (CRWV, NBIS, ALAB, ARM, GFS, CRDO) show N/A for longer horizons.
-- **Foreign-filer revenue currency:** yfinance reports financials in the statement currency, not
+- **Foreign-filer revenue currency:** financials are reported in the statement currency, not
   USD — TSM/UMC in **TWD**, Samsung/SK hynix in **KRW**, ASML in **EUR**. Absolute revenue is
-  tagged with `financial_currency` and the UI shows an amber caveat; margins and CAGRs are
-  currency-neutral ratios so they compare cleanly across filers.
+  tagged with `financial_currency`, and the deep-dive panel now also shows a **USD-normalized**
+  figure (`revenue_latest_usd`) converted at a stored **spot** rate from `backend.fx` (e.g. TSM
+  shows NT$ and ≈ US$). Because it's a spot rate rather than a fiscal-year average, the USD number
+  is a comparison aid, not a reported figure — the UI says so. Margins and CAGRs are
+  currency-neutral ratios so they compare cleanly across filers regardless of currency.
 
 ## Roadmap
 

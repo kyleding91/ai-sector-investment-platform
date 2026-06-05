@@ -96,6 +96,7 @@ def compute_metrics_for(ticker: str) -> dict:
         "ticker": ticker,
         "revenue_latest": None, "revenue_latest_period": None,
         "financial_currency": _financial_currency(ticker),
+        "revenue_latest_usd": None, "fx_rate": None, "fx_rate_asof": None,
         "operating_margin": None, "operating_margin_basis": None,
         "gross_margin": None,
         "revenue_3y_cagr": None, "revenue_cagr_window": None,
@@ -123,6 +124,21 @@ def compute_metrics_for(ticker: str) -> dict:
                 if cagr is not None:
                     metrics["revenue_3y_cagr"] = cagr
                     metrics["revenue_cagr_window"] = f"{_fy_label(old_period)} → {_fy_label(latest_period)} ({n}Y)"
+
+    # ---- USD normalization of latest revenue (foreign filers) ----
+    if metrics["revenue_latest"] is not None:
+        ccy = metrics["financial_currency"]
+        if ccy and ccy != "USD":
+            from backend.fx import get_rate
+            rate_info = get_rate(ccy)
+            if rate_info is not None:
+                rate, as_of = rate_info
+                metrics["revenue_latest_usd"] = metrics["revenue_latest"] * rate
+                metrics["fx_rate"] = rate
+                metrics["fx_rate_asof"] = as_of
+        else:  # already USD — USD figure is the native figure
+            metrics["revenue_latest_usd"] = metrics["revenue_latest"]
+            metrics["fx_rate"] = 1.0
 
     # ---- margins (latest period) ----
     if rev:
@@ -163,12 +179,15 @@ def compute_metrics_for(ticker: str) -> dict:
     with connect() as conn:
         conn.execute(
             "INSERT INTO company_metrics(ticker, revenue_latest, revenue_latest_period, "
-            "financial_currency, operating_margin, operating_margin_basis, gross_margin, "
+            "financial_currency, revenue_latest_usd, fx_rate, fx_rate_asof, "
+            "operating_margin, operating_margin_basis, gross_margin, "
             "revenue_3y_cagr, revenue_cagr_window, eps_3y_cagr, eps_cagr_window, eps_cagr_caveat, "
             "sources, last_updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(ticker) DO UPDATE SET "
             "revenue_latest=excluded.revenue_latest, revenue_latest_period=excluded.revenue_latest_period, "
+            "revenue_latest_usd=excluded.revenue_latest_usd, fx_rate=excluded.fx_rate, "
+            "fx_rate_asof=excluded.fx_rate_asof, "
             "financial_currency=excluded.financial_currency, operating_margin=excluded.operating_margin, "
             "operating_margin_basis=excluded.operating_margin_basis, gross_margin=excluded.gross_margin, "
             "revenue_3y_cagr=excluded.revenue_3y_cagr, revenue_cagr_window=excluded.revenue_cagr_window, "
@@ -176,7 +195,8 @@ def compute_metrics_for(ticker: str) -> dict:
             "eps_cagr_caveat=excluded.eps_cagr_caveat, sources=excluded.sources, "
             "last_updated_at=excluded.last_updated_at",
             (ticker, metrics["revenue_latest"], metrics["revenue_latest_period"],
-             metrics["financial_currency"], metrics["operating_margin"], metrics["operating_margin_basis"],
+             metrics["financial_currency"], metrics["revenue_latest_usd"], metrics["fx_rate"],
+             metrics["fx_rate_asof"], metrics["operating_margin"], metrics["operating_margin_basis"],
              metrics["gross_margin"], metrics["revenue_3y_cagr"], metrics["revenue_cagr_window"],
              metrics["eps_3y_cagr"], metrics["eps_cagr_window"], metrics["eps_cagr_caveat"],
              metrics["sources"], metrics["last_updated_at"]),
@@ -190,6 +210,7 @@ def get_metrics(ticker: str) -> dict | None:
     with connect() as conn:
         row = conn.execute(
             "SELECT ticker, revenue_latest, revenue_latest_period, financial_currency, "
+            "revenue_latest_usd, fx_rate, fx_rate_asof, "
             "operating_margin, operating_margin_basis, gross_margin, revenue_3y_cagr, "
             "revenue_cagr_window, eps_3y_cagr, eps_cagr_window, eps_cagr_caveat, sources, "
             "last_updated_at FROM company_metrics WHERE ticker=?",
@@ -201,11 +222,12 @@ def get_metrics(ticker: str) -> dict | None:
         "ticker": row[0],
         "revenue_latest": row[1], "revenue_latest_period": row[2],
         "financial_currency": row[3],
-        "operating_margin": row[4], "operating_margin_basis": row[5],
-        "gross_margin": row[6],
-        "revenue_3y_cagr": row[7], "revenue_cagr_window": row[8],
-        "eps_3y_cagr": row[9], "eps_cagr_window": row[10], "eps_cagr_caveat": row[11],
-        "sources": row[12], "last_updated_at": row[13],
+        "revenue_latest_usd": row[4], "fx_rate": row[5], "fx_rate_asof": row[6],
+        "operating_margin": row[7], "operating_margin_basis": row[8],
+        "gross_margin": row[9],
+        "revenue_3y_cagr": row[10], "revenue_cagr_window": row[11],
+        "eps_3y_cagr": row[12], "eps_cagr_window": row[13], "eps_cagr_caveat": row[14],
+        "sources": row[15], "last_updated_at": row[16],
     }
 
 
