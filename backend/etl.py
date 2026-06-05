@@ -89,7 +89,7 @@ def refresh(filter_tickers: list[str] | None = None) -> None:
 
     print(f"Refreshing {len(rows)} ticker(s)...")
     failures: list[tuple[str, str]] = []
-    for i, (display, yahoo, name) in enumerate(rows, 1):
+    for i, (display, yahoo, _name) in enumerate(rows, 1):
         try:
             df = fetch_history(yahoo)
             n = upsert_prices(display, df)
