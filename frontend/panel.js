@@ -417,6 +417,16 @@
           ${c.strategy_points.map(s => `<li class="flex gap-2"><span class="text-gray-400">•</span><span>${escapeHtml(s)}</span></li>`).join('')}
         </ul></div>`);
     }
+    if (c.risk_factors && c.risk_factors.length) {
+      const rsrc = c.source_url
+        ? `<a href="${escapeHtml(c.source_url)}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">${escapeHtml(c.source_form || 'filing')} ↗</a>`
+        : (c.source_form ? escapeHtml(c.source_form) : 'the annual report');
+      parts.push(`<div class="border border-amber-200 rounded-lg px-4 py-3 mb-3 bg-amber-50/40">
+        <div class="text-[10px] uppercase tracking-widest text-amber-700 mb-2">Key risks, in their words · from ${rsrc}</div>
+        <ul class="text-sm text-gray-800 space-y-1.5">
+          ${c.risk_factors.map(s => `<li class="flex gap-2"><span class="text-amber-500">▸</span><span>${escapeHtml(s)}</span></li>`).join('')}
+        </ul></div>`);
+    }
     if (c.mgmt_quotes && c.mgmt_quotes.length) {
       const src = c.mgmt_quotes_source
         ? `<a href="${escapeHtml(c.mgmt_quotes_source)}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">earnings release ↗</a>`

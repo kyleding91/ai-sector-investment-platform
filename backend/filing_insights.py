@@ -635,6 +635,141 @@ def extract_strategy_points(text: str, section: str, limit: int = 4) -> list[str
     return [pool[i] for i in ranked[:limit]]
 
 
+# ---------------- key risks (Item 1A / Item 3.D) ----------------
+
+# A "Risk Factors Summary" / "Overview of risk factors" heading on its own line —
+# modern 10-Ks (NVDA, AMD, MU…) and integrated 20-Fs (ASML, ARM) front-load a
+# concise bulleted/tabular list of every risk headline, which is the cleanest,
+# most representative source of "key risks in their own words".
+_RISK_SUMMARY_HEAD = re.compile(
+    r"\n[ \t]*(?:summary\s+of\s+risk\s+factors|risk\s+factors?\s+summary|"
+    r"overview\s+of\s+risk\s+factors)[ \t]*\n", re.I)
+# Category sub-headers ("Risks Related to Our Industry…") that group the list but
+# aren't themselves risks.
+_RISK_CAT = re.compile(r"^risks?\s+(?:related|relating|associated|arising)\b", re.I)
+# A trailing category header that bleeds into a bullet when the next line lacks a
+# bullet glyph ("Competition could… . Risks Related to Demand, Supply…").
+_RISK_CAT_TAIL = re.compile(
+    r"\s+Risks?\s+(?:Related|Relating|Associated|Arising)\s+to\b.*$", re.I)
+_BULLET = "•"
+# Page chrome / running headers that appear between table rows in 20-F layouts.
+_RISK_CHROME = (
+    "table of contents", "annual report", "strategic report", "corporate governance",
+    " sustainability", "at a glance", "q&a with", "our business",
+    "financial performance", "risk and security", "view on sec",
+)
+# Single-word "risk type" column labels in tabular overviews (ASML).
+_RISK_TYPE_WORDS = {
+    "strategic", "operations", "operation", "compliance", "other", "general",
+    "legal", "financial", "market", "risk", "type", "risk type", "risk factor",
+    "finance and reporting", "sustainability", "financials",
+}
+# Signals a sentence actually describes a risk (used by the section fallback).
+_RISK_SIG = re.compile(
+    r"\b(risk|could|may|might|harm|advers|affect|fail|unable|inabilit|subject\s+to|"
+    r"depend|declin|disrupt|uncertain|volatil|downturn|unfavorab|breach|defect|"
+    r"negativ|material|competit|shortage|fluctuat|impair|litigat|loss|cyber|delay|"
+    r"interrupt|tariff|sanction|shortfall)", re.I)
+# Boilerplate that opens a Risk Factors section but isn't a risk headline.
+_RISK_BAD = (
+    "forward-looking", "table of contents", "see item", "should read",
+    "incorporated by reference", "exhaustive", "in conjunction with",
+    "the following risk", "additional risk", "these risk", "each of these",
+    "the risk factors", "set forth below", "described below",
+)
+
+
+def _risk_cand_ok(s: str) -> bool:
+    """A summary-list candidate is a real, self-contained risk headline."""
+    low = s.lower().strip()
+    if not (24 <= len(s) <= 320):
+        return False
+    if not s[:1].isupper():
+        return False
+    if low in _RISK_TYPE_WORDS:
+        return False
+    if _RISK_CAT.match(s):
+        return False
+    if any(c in low for c in _RISK_CHROME):
+        return False
+    if low.startswith(("the following risk", "additional risk", "these risk",
+                       "each of these")):
+        return False
+    # Must read like a sentence (two run-on lowercase words), not a heading scrap.
+    return bool(re.search(r"[a-z]{3,}\s+\S*[a-z]{3,}", s))
+
+
+def _risk_summary_factors(text: str, limit: int) -> list[str]:
+    """Risk headlines from a 'Risk Factors Summary' / 'Overview of risk factors'
+    block — bulleted (10-K) or one-per-row (20-F table)."""
+    m = _RISK_SUMMARY_HEAD.search(text)
+    if not m:
+        return []
+    region = text[m.end():m.end() + 9000]
+    bullets = region.count(_BULLET) >= 3
+    pieces = region.split(_BULLET) if bullets else region.split("\n")
+    out: list[str] = []
+    for p in pieces:
+        s = _RISK_CAT_TAIL.sub("", _clean(p)).strip()
+        if _risk_cand_ok(s) and s not in out:
+            out.append(s)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _risk_section_span(text: str, form: str) -> str | None:
+    """The body of the Risk Factors section: Item 1A→1B/2 (10-K) or
+    Item 3.D→Item 4 (20-F)."""
+    if form == "20-F":
+        return (_best_span(text, r"item\s*3[\.\s]*d[\.\s:]*\s*risk", r"item\s*4[\.\s:]")
+                or _best_span(text, r"item\s*3[\.\s:]+key\s+information", r"item\s*4[\.\s:]"))
+    return (_best_span(text, r"item\s*1a[\.\s:]+risk\s+factors", r"item\s*1b[\.\s:]")
+            or _best_span(text, r"item\s*1a[\.\s:]+risk\s+factors", r"item\s*2[\.\s:]+propert"))
+
+
+def _risk_fallback_factors(text: str, form: str, limit: int) -> list[str]:
+    """For filers without a summary block: harvest the bold risk sub-headings.
+    In the flattened text each heading is a short, sentence-like paragraph
+    immediately followed by a much longer explanatory paragraph."""
+    section = _risk_section_span(text, form)
+    if not section:
+        return []
+    paras = [_clean(p) for p in re.split(r"\n\s*\n", section)]
+    out: list[str] = []
+    for i, p in enumerate(paras):
+        if not (24 <= len(p) <= 300):
+            continue
+        if not p[:1].isupper() or not p.rstrip().endswith("."):
+            continue
+        if _RISK_CAT.match(p):
+            continue
+        low = p.lower()
+        if any(b in low for b in _RISK_BAD):
+            continue
+        if not _RISK_SIG.search(p):
+            continue
+        nxt = paras[i + 1] if i + 1 < len(paras) else ""
+        if len(nxt) < 200:  # a real heading is followed by an explanation paragraph
+            continue
+        first = re.split(r"(?<=[.])\s+(?=[A-Z])", p)[0]
+        if 24 <= len(first) <= 300 and first not in out:
+            out.append(first)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def extract_risk_factors(text: str, form: str, limit: int = 5) -> list[str]:
+    """3-5 verbatim "key risks in their own words" from the latest annual report.
+    Prefers the company's own risk-summary list; falls back to the bold risk
+    sub-headings in the Item 1A / Item 3.D body."""
+    factors = _risk_summary_factors(text, limit)
+    if len(factors) >= 3:
+        return factors
+    return _risk_fallback_factors(text, form, limit)
+
+
 # ---------------- management quotes ----------------
 
 # Attribution verbs companies use to introduce a leadership quote in an earnings release.
@@ -742,6 +877,7 @@ def build_for_ticker(ticker: str) -> dict | None:
         "business_overview": None,
         "segments_note": None,
         "strategy_points": [],
+        "risk_factors": [],
         "mgmt_quotes": [],
     }
     source_form = source_period = source_url = None
@@ -764,6 +900,7 @@ def build_for_ticker(ticker: str) -> dict | None:
         if section:
             payload["strategy_points"] = extract_strategy_points(text, section)
         payload["segments_note"] = extract_segments_note(text)
+        payload["risk_factors"] = extract_risk_factors(text, source_form)
 
     earnings = _latest_earnings_text(ticker)
     if earnings:
@@ -833,7 +970,8 @@ def refresh_ticker(ticker: str) -> bool:
     save(t, payload)
     sd = (payload["self_description"] or "")[:80]
     print(f"  [ok]   {t}: {payload['_source_form'] or '—'} "
-          f"{payload['_source_period'] or ''}  quotes={len(payload['mgmt_quotes'])}  "
+          f"{payload['_source_period'] or ''}  risks={len(payload['risk_factors'])}  "
+          f"quotes={len(payload['mgmt_quotes'])}  "
           f"{'“' + sd + '…”' if sd else '(no self-desc)'}")
     return True
 

@@ -87,7 +87,9 @@ earnings release on disk — how the company describes its own business, in its 
 sentence is sourced text that links back to the filing on SEC EDGAR; nothing is AI-generated, so
 this works offline with no API key. Surfaces on the deep-dive page as an "In their own words"
 block: a bold self-description lead, a business overview, reportable-segments note, strategy
-points, and management quotes from the latest earnings release.
+points, the company's own **key risk factors** (verbatim from Item 1A / Item 3.D — the
+risk-summary list when present, else the bold risk sub-headings), and management quotes from
+the latest earnings release.
 
 ```bash
 python -m backend.filing_insights refresh all     # whole watchlist (parses on-disk filings)
