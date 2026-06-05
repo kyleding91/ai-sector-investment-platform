@@ -31,6 +31,11 @@
     .heat-cell.bench { background: #fef3c7 !important; font-weight: 700; }
     .heat-cell.bench-row { background: #fffbeb; }
     .na { color: #9ca3af; font-style: italic; }
+    /* Horizon focus: emphasize one return column, mute the rest. */
+    .heat-cell.value.dim { background: #ffffff !important; color: #cbd5e1; }
+    .heat-cell.head.dim { color: #cbd5e1; }
+    .heat-cell.value.focus-col { box-shadow: inset 0 0 0 2px rgba(30,41,59,0.45); }
+    .heat-cell.head.focus-col { background: #eef2ff; color: #1e293b; }
 
     .panel-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.35);
       opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 50; }
@@ -57,6 +62,15 @@
   </header>
 
   <div class="mb-4 flex flex-wrap gap-4 items-center" id="controls">
+    <label class="text-sm text-gray-700">Focus horizon:
+      <select id="focus-horizon" class="ml-1 px-2 py-1 border rounded text-sm">
+        <option value="all" selected>All</option>
+        <option value="1y">1Y</option>
+        <option value="3y">3Y</option>
+        <option value="5y">5Y</option>
+        <option value="10y">10Y</option>
+      </select>
+    </label>
     <label class="text-sm text-gray-700">Sort within layer:
       <select id="sort-by" class="ml-1 px-2 py-1 border rounded text-sm">
         <option value="1y">1Y</option>
@@ -128,9 +142,11 @@
   // Far-from-center distance until full saturation, per horizon.
   const SCALES = { '1y': 0.40, '3y': 0.30, '5y': 0.25, '10y': 0.20 };
 
-  function render(data, horizons, benchmarks, primary, sortBy, colorMode) {
+  function render(data, horizons, benchmarks, primary, sortBy, colorMode, focus) {
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
+    // Per-horizon emphasis class when a single horizon is in focus.
+    const hClass = h => (!focus || focus === 'all') ? '' : (h === focus ? 'focus-col' : 'dim');
 
     // group by segment, ordered by layer
     const bySeg = new Map();      // segment -> {layer, rows: []}
@@ -147,7 +163,7 @@
       d.className = 'heat-cell head ' + extra; d.textContent = text; return d;
     };
     wrap.appendChild(head('Ticker'));
-    for (const h of horizons) wrap.appendChild(head(h.toUpperCase(), 'value'));
+    for (const h of horizons) wrap.appendChild(head(h.toUpperCase(), ('value ' + hClass(h)).trim()));
     wrap.appendChild(head('Name'));
 
     // Benchmark rows pinned at top
@@ -158,7 +174,8 @@
       for (const h of horizons) {
         const v = b.returns[h];
         const c = document.createElement('div');
-        c.className = 'heat-cell value bench' + (v == null ? ' na' : '');
+        const fc = hClass(h);
+        c.className = 'heat-cell value bench' + (v == null ? ' na' : '') + (fc ? ' ' + fc : '');
         c.textContent = fmt(v); c.title = `${b.name} ${h.toUpperCase()}: ${fmt(v)}`;
         wrap.appendChild(c);
       }
@@ -208,7 +225,8 @@
         for (const h of horizons) {
           const v = r.returns[h];
           const c = document.createElement('div');
-          c.className = 'heat-cell value' + (v == null ? ' na' : '');
+          const fc = hClass(h);
+          c.className = 'heat-cell value' + (v == null ? ' na' : '') + (fc ? ' ' + fc : '');
           c.textContent = fmt(v);
           c.style.background = color(v, centers[h], SCALES[h]);
           const bv = benchVal(h);
@@ -305,9 +323,16 @@
   function rerender() {
     if (!CACHED) return;
     render(CACHED.data, CACHED.horizons, CACHED.benchmarks, CACHED.primary_benchmark,
-      document.getElementById('sort-by').value, document.getElementById('color-mode').value);
+      document.getElementById('sort-by').value, document.getElementById('color-mode').value,
+      document.getElementById('focus-horizon').value);
   }
 
+  // Focusing a horizon also sorts by it (unless the user picked an explicit sort).
+  document.getElementById('focus-horizon').addEventListener('change', (e) => {
+    const f = e.target.value;
+    if (f !== 'all') document.getElementById('sort-by').value = f;
+    rerender();
+  });
   document.getElementById('sort-by').addEventListener('change', rerender);
   document.getElementById('color-mode').addEventListener('change', rerender);
   load();
