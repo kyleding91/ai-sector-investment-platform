@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m backend.companies)",
+      "Bash(python3 -m backend.seed)",
+      "Bash(python3 -c \"import yfinance, curl_cffi, fastapi, uvicorn, pandas; print\\('deps OK'\\)\")"
+    ]
+  }
+}

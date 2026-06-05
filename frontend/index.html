@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Sector Investment Platform — Returns Heat Map</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .heat-grid {
+      display: grid;
+      grid-template-columns: 90px 96px 96px 96px 96px 1fr;
+      gap: 1px;
+      background: #e5e7eb;
+      border: 1px solid #e5e7eb;
+    }
+    .heat-cell { padding: 8px 10px; background: white; font-variant-numeric: tabular-nums; font-size: 13px; }
+    .heat-cell.head { background: #f9fafb; font-weight: 600; color: #4b5563; }
+    .heat-cell.ticker { font-weight: 600; cursor: pointer; }
+    .heat-cell.ticker:hover { background: #eff6ff; }
+    .heat-cell.value { text-align: right; font-weight: 500; }
+    .seg-header {
+      grid-column: 1 / -1; background: #f3f4f6; padding: 6px 10px; font-size: 12px;
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #4b5563;
+      border-top: 2px solid #d1d5db; display: flex; gap: 8px; align-items: baseline;
+    }
+    .seg-header .layer-badge {
+      background: #1e293b; color: white; border-radius: 4px; padding: 1px 6px;
+      font-size: 10px; letter-spacing: 0; font-weight: 700;
+    }
+    .heat-cell.bench { background: #fef3c7 !important; font-weight: 700; }
+    .heat-cell.bench-row { background: #fffbeb; }
+    .na { color: #9ca3af; font-style: italic; }
+
+    .panel-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.35);
+      opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 50; }
+    .panel-backdrop.open { opacity: 1; pointer-events: auto; }
+    .side-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 95vw);
+      background: white; box-shadow: -8px 0 28px rgba(15,23,42,0.18);
+      transform: translateX(100%); transition: transform 0.2s; z-index: 60; overflow-y: auto; }
+    .side-panel.open { transform: translateX(0); }
+    .panel-header { position: sticky; top: 0; background: white; padding: 16px 20px;
+      border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+    .panel-body { padding: 16px 20px 32px; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+
+<div class="max-w-7xl mx-auto p-6">
+  <header class="mb-4">
+    <h1 class="text-2xl font-bold">AI Sector — Annualized Total Returns</h1>
+    <p class="text-sm text-gray-600 mt-1">
+      AI infrastructure &amp; semiconductors, organized as a value chain (design → demand).
+      Total return annualized over 1 / 3 / 5 / 10 years.
+      <span id="meta-asof" class="ml-2"></span>
+    </p>
+  </header>
+
+  <div class="mb-4 flex flex-wrap gap-4 items-center" id="controls">
+    <label class="text-sm text-gray-700">Sort within layer:
+      <select id="sort-by" class="ml-1 px-2 py-1 border rounded text-sm">
+        <option value="1y">1Y</option>
+        <option value="3y">3Y</option>
+        <option value="5y">5Y</option>
+        <option value="10y">10Y</option>
+        <option value="ticker">Ticker</option>
+      </select>
+    </label>
+    <label class="text-sm text-gray-700">Color centered on:
+      <select id="color-mode" class="ml-1 px-2 py-1 border rounded text-sm">
+        <option value="benchmark" selected>SOX (semis index)</option>
+        <option value="median">Layer median</option>
+        <option value="zero">0% (absolute)</option>
+      </select>
+    </label>
+  </div>
+
+  <div id="status" class="text-sm text-gray-500">Loading…</div>
+  <div id="grid"></div>
+
+  <p class="text-xs text-gray-500 mt-6">
+    Default coloring centers on the PHLX Semiconductor Index (SOX) — green = beat the semis tape over that horizon, red = lagged. Hover any cell for the spread vs SOX. Click a ticker for a price + performance snapshot. Korean rows (Samsung, SK hynix) are priced in KRW (local-currency return). N/A = not enough trading history (recent IPOs).
+  </p>
+</div>
+
+<div id="panel-backdrop" class="panel-backdrop" onclick="closePanel()"></div>
+<aside id="side-panel" class="side-panel" aria-hidden="true">
+  <div class="panel-header">
+    <div>
+      <div id="panel-title" class="text-lg font-bold"></div>
+      <div id="panel-subtitle" class="text-xs text-gray-500"></div>
+    </div>
+    <div class="flex items-center gap-3">
+      <a id="panel-popout" href="#" target="_blank" rel="noopener"
+         class="text-xs text-blue-600 hover:underline hidden" title="Open as a standalone page">Open as page ↗</a>
+      <button onclick="closePanel()" class="text-gray-500 hover:text-gray-900 text-2xl leading-none">&times;</button>
+    </div>
+  </div>
+  <div id="panel-body" class="panel-body"></div>
+</aside>
+
+<script src="/panel.js"></script>
+<script>
+  const HORIZONS = ['1y', '3y', '5y', '10y'];
+  const escapeHtml = PanelLib.escapeHtml;
+  const apiUrl = PanelLib.apiUrl;
+
+  // diverging red -> white -> green
+  function color(value, center, scale) {
+    if (value == null || isNaN(value)) return '#ffffff';
+    const t = Math.max(-1, Math.min(1, (value - center) / scale));
+    if (t >= 0) {
+      const r = Math.round(255 - 175 * t), g = Math.round(255 - 50 * t), b = Math.round(255 - 175 * t);
+      return `rgb(${r},${g},${b})`;
+    }
+    const a = -t;
+    const r = Math.round(255 - 30 * a), g = Math.round(255 - 180 * a), b = Math.round(255 - 180 * a);
+    return `rgb(${r},${g},${b})`;
+  }
+  function fmt(v) { return (v == null || isNaN(v)) ? 'N/A' : (v * 100).toFixed(1) + '%'; }
+  function median(values) {
+    const xs = values.filter(v => v != null && !isNaN(v)).sort((a, b) => a - b);
+    if (!xs.length) return 0;
+    const mid = Math.floor(xs.length / 2);
+    return xs.length % 2 ? xs[mid] : (xs[mid - 1] + xs[mid]) / 2;
+  }
+
+  // Far-from-center distance until full saturation, per horizon.
+  const SCALES = { '1y': 0.40, '3y': 0.30, '5y': 0.25, '10y': 0.20 };
+
+  function render(data, horizons, benchmarks, primary, sortBy, colorMode) {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+
+    // group by segment, ordered by layer
+    const bySeg = new Map();      // segment -> {layer, rows: []}
+    for (const row of data) {
+      if (!bySeg.has(row.segment)) bySeg.set(row.segment, { layer: row.layer, rows: [] });
+      bySeg.get(row.segment).rows.push(row);
+    }
+    const orderedSegs = [...bySeg.entries()].sort((a, b) => a[1].layer - b[1].layer).map(e => e[0]);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'heat-grid rounded-md overflow-hidden';
+    const head = (text, extra = '') => {
+      const d = document.createElement('div');
+      d.className = 'heat-cell head ' + extra; d.textContent = text; return d;
+    };
+    wrap.appendChild(head('Ticker'));
+    for (const h of horizons) wrap.appendChild(head(h.toUpperCase(), 'value'));
+    wrap.appendChild(head('Name'));
+
+    // Benchmark rows pinned at top
+    for (const b of (benchmarks || [])) {
+      const tk = document.createElement('div');
+      tk.className = 'heat-cell ticker bench-row'; tk.textContent = b.ticker; tk.style.cursor = 'default';
+      wrap.appendChild(tk);
+      for (const h of horizons) {
+        const v = b.returns[h];
+        const c = document.createElement('div');
+        c.className = 'heat-cell value bench' + (v == null ? ' na' : '');
+        c.textContent = fmt(v); c.title = `${b.name} ${h.toUpperCase()}: ${fmt(v)}`;
+        wrap.appendChild(c);
+      }
+      const nm = document.createElement('div');
+      nm.className = 'heat-cell bench-row text-gray-700'; nm.textContent = b.name;
+      wrap.appendChild(nm);
+    }
+
+    function centersForRows(rows) {
+      const out = {};
+      for (const h of horizons) {
+        if (colorMode === 'benchmark' && primary && primary.returns[h] != null) out[h] = primary.returns[h];
+        else if (colorMode === 'median') out[h] = median(rows.map(r => r.returns[h]));
+        else out[h] = 0;
+      }
+      return out;
+    }
+
+    for (const seg of orderedSegs) {
+      const entry = bySeg.get(seg);
+      const segHeader = document.createElement('div');
+      segHeader.className = 'seg-header';
+      segHeader.innerHTML = `<span class="layer-badge">L${entry.layer}</span>
+        <span>${escapeHtml(seg)}</span>
+        <span class="text-gray-400 font-normal normal-case">${entry.rows.length} names</span>`;
+      wrap.appendChild(segHeader);
+
+      const rows = entry.rows.slice();
+      if (sortBy === 'ticker') rows.sort((a, b) => a.ticker.localeCompare(b.ticker));
+      else rows.sort((a, b) => {
+        const av = a.returns[sortBy], bv = b.returns[sortBy];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1; if (bv == null) return -1;
+        return bv - av;
+      });
+
+      const centers = centersForRows(rows);
+      const benchVal = h => (primary ? primary.returns[h] : null);
+
+      for (const r of rows) {
+        const tk = document.createElement('div');
+        tk.className = 'heat-cell ticker'; tk.textContent = r.ticker;
+        tk.title = `${r.name} — click for snapshot`;
+        tk.addEventListener('click', () => openStockPanel(r.ticker, r.name, r.segment));
+        wrap.appendChild(tk);
+
+        for (const h of horizons) {
+          const v = r.returns[h];
+          const c = document.createElement('div');
+          c.className = 'heat-cell value' + (v == null ? ' na' : '');
+          c.textContent = fmt(v);
+          c.style.background = color(v, centers[h], SCALES[h]);
+          const bv = benchVal(h);
+          const delta = (v != null && bv != null) ? (v - bv) : null;
+          c.title = `${r.ticker} ${h.toUpperCase()}: ${fmt(v)}`
+            + (delta != null ? `   (vs SOX: ${delta >= 0 ? '+' : ''}${(delta * 100).toFixed(1)} pp)` : '');
+          wrap.appendChild(c);
+        }
+
+        const nm = document.createElement('div');
+        nm.className = 'heat-cell text-gray-600 truncate'; nm.textContent = r.name;
+        wrap.appendChild(nm);
+      }
+    }
+    grid.appendChild(wrap);
+  }
+
+  // ---------- side panel ----------
+  function openPanel(title, subtitle) {
+    document.getElementById('panel-title').textContent = title;
+    document.getElementById('panel-subtitle').textContent = subtitle || '';
+    document.getElementById('panel-body').innerHTML = '<div class="text-sm text-gray-500">Loading…</div>';
+    document.getElementById('side-panel').classList.add('open');
+    document.getElementById('side-panel').setAttribute('aria-hidden', 'false');
+    document.getElementById('panel-backdrop').classList.add('open');
+  }
+  function closePanel() {
+    document.getElementById('side-panel').classList.remove('open');
+    document.getElementById('side-panel').setAttribute('aria-hidden', 'true');
+    document.getElementById('panel-backdrop').classList.remove('open');
+  }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePanel(); });
+
+  function setPopout(ticker) {
+    const a = document.getElementById('panel-popout');
+    if (ticker) { a.href = '/stock.html?ticker=' + encodeURIComponent(ticker); a.classList.remove('hidden'); }
+    else { a.classList.add('hidden'); a.removeAttribute('href'); }
+  }
+
+  async function openStockPanel(ticker, name, segment) {
+    openPanel(`${ticker} — ${name}`, segment);
+    setPopout(ticker);
+    const body = document.getElementById('panel-body');
+    try {
+      const [snap, metrics, insight, filingInsights, filingsJson] = await Promise.all([
+        fetch(apiUrl('/api/snapshot/' + encodeURIComponent(ticker))).then(r => r.json()),
+        fetch(apiUrl('/api/metrics/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
+        fetch(apiUrl('/api/insights/stock/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
+        fetch(apiUrl('/api/filing-insights/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => null),
+        fetch(apiUrl('/api/filings/' + encodeURIComponent(ticker))).then(r => r.json()).catch(() => ({ filings: [] })),
+      ]);
+      const heatRow = (CACHED && CACHED.data || []).find(r => r.ticker === ticker);
+      PanelLib.renderCompany(body, {
+        ticker,
+        snapshot: snap.exists ? snap : null,
+        heatRow,
+        primaryBenchmark: CACHED ? CACHED.primary_benchmark : null,
+        metrics,
+        insight,
+        filingInsights,
+        filings: (filingsJson && filingsJson.filings) || [],
+        notes: NOTES[ticker] || '',
+        compact: true,
+      });
+    } catch (e) {
+      body.innerHTML = `<div class="text-sm text-red-600">Failed: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  let CACHED = null;
+  let NOTES = {};
+
+  async function load() {
+    const status = document.getElementById('status');
+    status.textContent = 'Loading…';
+    try {
+      const [returnsJson, companiesJson] = await Promise.all([
+        fetch(apiUrl('/api/returns')).then(r => r.json()),
+        fetch(apiUrl('/api/companies')).then(r => r.json()).catch(() => ({ companies: [] })),
+      ]);
+      CACHED = returnsJson;
+      NOTES = {};
+      for (const c of (companiesJson.companies || [])) NOTES[c.ticker] = c.notes || '';
+      const asof = returnsJson.as_of || '—';
+      const refreshed = returnsJson.last_refresh_at ? new Date(returnsJson.last_refresh_at).toLocaleString() : '—';
+      document.getElementById('meta-asof').textContent = `Data as of ${asof}  ·  Last refreshed ${refreshed}`;
+      status.textContent = '';
+      rerender();
+    } catch (e) {
+      status.textContent = 'Failed to load: ' + e.message;
+    }
+  }
+
+  function rerender() {
+    if (!CACHED) return;
+    render(CACHED.data, CACHED.horizons, CACHED.benchmarks, CACHED.primary_benchmark,
+      document.getElementById('sort-by').value, document.getElementById('color-mode').value);
+  }
+
+  document.getElementById('sort-by').addEventListener('change', rerender);
+  document.getElementById('color-mode').addEventListener('change', rerender);
+  load();
+</script>
+</body>
+</html>
