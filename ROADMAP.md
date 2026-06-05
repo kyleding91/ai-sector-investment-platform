@@ -36,7 +36,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done (see PROGRESS.md) �
    - Small revenue/margin trend charts on stock.html from `fundamentals`.
    - Acceptance: NVDA shows a multi-year revenue sparkline.
 
-6. `[~]` **Heat map UX: horizon toggle + sorting** (`feat/heatmap-ux`)
+6. `[x]` **Heat map UX: horizon toggle + sorting** (`feat/heatmap-ux`) — see PROGRESS.md
    - Toggle return horizon (1Y/3Y/5Y) and sort within layers.
    - Acceptance: toggling re-colors without reload; sort works.
 

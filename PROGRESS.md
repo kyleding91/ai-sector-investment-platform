@@ -9,6 +9,19 @@ shipped · how it was verified. Review a feature with `git diff main..<branch>` 
 
 ---
 
+## 2026-06-05 · `feat/heatmap-ux` · Heat-map horizon focus toggle (re-colors without reload)
+Added a **"Focus horizon"** selector to the heat-map controls in `frontend/index.html`. Picking a
+horizon (1Y/3Y/5Y/10Y) emphasizes that single return column — a ring on each value cell plus a
+tinted header — and **dims** the other columns (white cells, muted text) so the eye lands on one
+time frame; "All" restores the full diverging view. Focusing a horizon also **auto-syncs "Sort
+within layer"** to that horizon, so rows reorder instantly. New `render()` `focus` param drives a
+per-horizon `hClass()` applied to header, benchmark-row, and company cells; the `focus-horizon`
+change listener sets sort + re-renders. Entirely client-side — no reload, no refetch.
+**Verified:** in a real browser via Claude Preview on :8010 — toggling to "3Y" flips `sort-by` to
+`3y` and re-paints **41 focus-col + 123 dimmed** cells with zero network calls; "All" restores.
+Returns endpoint serves 38 rows; page 200s. No backend changes.
+**Review:** `git diff main..feat/heatmap-ux` · open http://127.0.0.1:8010/ and toggle Focus horizon.
+
 ## 2026-06-05 · `feat/metric-sparklines` · Fundamentals trend sparklines on the deep-dive
 Added `get_series()` to `backend/metrics.py` — builds a per-year **revenue + gross/operating
 margin** series (oldest→newest, capped at the latest 10 FYs) from the merged multi-source
