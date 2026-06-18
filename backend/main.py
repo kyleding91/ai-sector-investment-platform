@@ -263,7 +263,8 @@ def search_filings(q: str = "", limit: int = 25, ticker: str | None = None) -> d
     with highlighted snippets that link back to the document on SEC EDGAR. Empty
     query (or a missing index) yields no results rather than an error.
     """
-    from backend.search import index_exists, search as fts_search
+    from backend.search import index_exists
+    from backend.search import search as fts_search
 
     query = (q or "").strip()
     if not query:

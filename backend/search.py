@@ -21,7 +21,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from backend.db import connect, set_meta, get_meta
+from backend.db import connect, get_meta, set_meta
 from backend.filing_insights import html_to_text
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

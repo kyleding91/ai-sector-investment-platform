@@ -71,7 +71,6 @@ def _winning_sources(ticker: str) -> str:
     manual), so the label reflects the data the metrics were computed from.
     Ordered highest-priority first, e.g. 'SEC EDGAR XBRL + yfinance'.
     """
-    facts = _facts_by_concept(ticker)  # already source-deduped
     # Re-derive which source won each (concept, period) from the raw rows.
     with connect() as conn:
         rows = conn.execute(

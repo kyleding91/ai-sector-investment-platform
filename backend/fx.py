@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 
 from backend.db import connect, init_schema
 
+
 # yfinance quotes 'XXXUSD=X' as USD per 1 unit of XXX — exactly our usd_per_unit.
 def _pair(currency: str) -> str:
     return f"{currency.upper()}USD=X"
@@ -45,6 +46,7 @@ def _fetch_one(currency: str) -> tuple[float, str] | None:
     """Return (usd_per_unit, as_of_date) for a currency, or None on failure."""
     try:
         import yfinance as yf
+
         from backend.etl import _SESSION
         t = yf.Ticker(_pair(currency), session=_SESSION) if _SESSION else yf.Ticker(_pair(currency))
         hist = t.history(period="5d")
