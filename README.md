@@ -1,5 +1,7 @@
 # AI Sector Investment Platform
 
+[![CI](https://github.com/kyleding91/ai-sector-investment-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/kyleding91/ai-sector-investment-platform/actions/workflows/ci.yml)
+
 A local web dashboard for tracking AI-infrastructure and semiconductor stocks, organized
 as a **value chain** — from chip design at the top to the hyperscalers that buy the compute
 at the bottom. Heat map of annualized total returns colored against the PHLX Semiconductor
