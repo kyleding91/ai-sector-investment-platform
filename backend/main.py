@@ -179,6 +179,18 @@ def metrics(ticker: str) -> dict[str, Any]:
     return {"exists": True, **m}
 
 
+@app.get("/api/fundamentals/{ticker}")
+def fundamentals_series(ticker: str) -> dict[str, Any]:
+    """Per-year revenue + gross/operating margin series for the deep-dive
+    sparklines (oldest→newest), or exists=False if no fundamentals on file."""
+    from backend.metrics import get_series
+    t = ticker.upper()
+    s = get_series(t)
+    if not s["points"]:
+        return {"ticker": t, "exists": False}
+    return {"exists": True, **s}
+
+
 @app.get("/api/insights/stock/{ticker}")
 def insight_stock(ticker: str) -> dict[str, Any]:
     """Latest LLM-generated stock panel, or exists=False if none stored yet."""

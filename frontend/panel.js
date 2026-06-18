@@ -363,6 +363,67 @@
     return n + ' B';
   }
 
+  // A compact inline sparkline. `vals` is an array of numbers (nulls allowed and
+  // skipped). Draws a baseline area + line with a dot on the most recent point.
+  function sparklineSVG(vals, opts) {
+    const { w = 150, h = 38, color = '#2563eb', fill = '#dbeafe' } = opts || {};
+    const pts = vals.map((v, i) => ({ i, v })).filter(p => p.v != null && !isNaN(p.v));
+    if (pts.length < 2) return '<div class="text-xs text-gray-400">—</div>';
+    const pad = 3;
+    const xs = vals.length - 1 || 1;
+    const ys = pts.map(p => p.v);
+    let lo = Math.min(...ys), hi = Math.max(...ys);
+    if (hi === lo) { hi += 1; lo -= 1; }
+    const xToPx = i => pad + (i / xs) * (w - 2 * pad);
+    const yToPx = v => pad + (1 - (v - lo) / (hi - lo)) * (h - 2 * pad);
+    const line = pts.map((p, k) => `${k === 0 ? 'M' : 'L'}${xToPx(p.i).toFixed(1)},${yToPx(p.v).toFixed(1)}`).join(' ');
+    const last = pts[pts.length - 1];
+    const area = `${line} L${xToPx(last.i).toFixed(1)},${(h - pad).toFixed(1)} L${xToPx(pts[0].i).toFixed(1)},${(h - pad).toFixed(1)} Z`;
+    const rising = last.v >= pts[0].v;
+    const stroke = color || (rising ? '#16a34a' : '#dc2626');
+    return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block">
+      <path d="${area}" fill="${fill}" opacity="0.4"/>
+      <path d="${line}" fill="none" stroke="${stroke}" stroke-width="1.5"/>
+      <circle cx="${xToPx(last.i).toFixed(1)}" cy="${yToPx(last.v).toFixed(1)}" r="2.5" fill="${stroke}"/>
+    </svg>`;
+  }
+
+  // Multi-year fundamentals trend sparklines (revenue + gross/operating margin),
+  // from /api/fundamentals/{ticker}. All figures are reported-currency / verbatim.
+  function fundamentalsBlock(rec) {
+    if (!rec || !rec.exists || !rec.points || rec.points.length < 2) return '';
+    const pts = rec.points;
+    const ccy = rec.currency || 'USD';
+    const span = `${pts[0].period} – ${pts[pts.length - 1].period}`;
+    const card = (label, vals, latestStr, fmtColor) => {
+      const shown = vals.filter(v => v != null);
+      if (shown.length < 2) return '';
+      return `<div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
+        <div class="flex items-baseline justify-between mb-1">
+          <div class="text-[10px] uppercase tracking-widest text-gray-500">${label}</div>
+          <div class="text-sm font-semibold ${fmtColor || 'text-gray-900'}">${latestStr}</div>
+        </div>
+        ${sparklineSVG(vals, { color: fmtColor ? null : '#2563eb' })}
+      </div>`;
+    };
+    const rev = pts.map(p => p.revenue);
+    const gm = pts.map(p => p.gross_margin == null ? null : p.gross_margin * 100);
+    const om = pts.map(p => p.operating_margin == null ? null : p.operating_margin * 100);
+    const lastRev = rev[rev.length - 1];
+    const lastGm = [...gm].reverse().find(v => v != null);
+    const lastOm = [...om].reverse().find(v => v != null);
+    const cards = [
+      card('Revenue', rev, fmtMoney(lastRev, ccy), null),
+      card('Gross margin', gm, lastGm == null ? '—' : lastGm.toFixed(0) + '%', null),
+      card('Operating margin', om, lastOm == null ? '—' : lastOm.toFixed(0) + '%', null),
+    ].filter(Boolean);
+    if (!cards.length) return '';
+    return `<div>
+      <div class="grid grid-cols-3 gap-2">${cards.join('')}</div>
+      <div class="text-[11px] text-gray-400 mt-2">Fiscal-year trend ${span}${ccy !== 'USD' ? ' · ' + escapeHtml(ccy) : ''} · from reported fundamentals.</div>
+    </div>`;
+  }
+
   // SEC EDGAR filings, grouped by type, newest-first. `filings` is the array
   // from /api/filings/{ticker}. Foreign filers show 20-F/6-K instead of 10-K/10-Q.
   function filingsBlock(filings) {
@@ -471,9 +532,14 @@
   // opts: { ticker, snapshot, heatRow, primaryBenchmark, metrics, insight, filingInsights, filings, notes, compact }
   function renderCompany(target, opts) {
     opts = opts || {};
+    const trendsHtml = fundamentalsBlock(opts.fundamentals);
     target.innerHTML = `
       <div data-snap></div>
       <div data-metrics class="mt-5"></div>
+      ${trendsHtml ? `<div data-trends class="mt-5">
+        <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Fundamentals trend</div>
+        <div data-trends-body></div>
+      </div>` : ''}
       <div data-own-words class="mt-5">
         <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">In their own words</div>
         <div data-own-words-body></div>
@@ -488,6 +554,7 @@
       </div>`;
     renderSnapshot(target.querySelector('[data-snap]'), opts);
     target.querySelector('[data-metrics]').innerHTML = metricsTiles(opts.metrics);
+    if (trendsHtml) target.querySelector('[data-trends-body]').innerHTML = trendsHtml;
     target.querySelector('[data-own-words-body]').innerHTML = filingInsightsBlock(opts.filingInsights);
     const ib = target.querySelector('[data-insight-body]');
     ib.innerHTML = insightBlock(target, opts.insight);
