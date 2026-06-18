@@ -54,11 +54,23 @@ def companies() -> dict[str, Any]:
 @app.get("/api/returns")
 def returns() -> dict[str, Any]:
     df = compute_table()
+    horizons = [f"{y}y" for y in HORIZONS_YEARS]
+
+    # Fresh / unseeded DB: compute_table() has no rows (and no columns) — return
+    # an empty-but-well-formed payload rather than KeyError-ing on df["as_of"].
+    if df.empty:
+        return {
+            "as_of": None,
+            "last_refresh_at": get_meta("last_refresh_at"),
+            "horizons": horizons,
+            "benchmarks": [],
+            "primary_benchmark": None,
+            "data": [],
+        }
+
     df = df.where(pd.notna(df), None)  # NaN -> None for JSON
     as_of_dates = [d for d in df["as_of"].dropna().tolist()]
     as_of = max(as_of_dates) if as_of_dates else None
-
-    horizons = [f"{y}y" for y in HORIZONS_YEARS]
 
     def to_record(r) -> dict[str, Any]:
         return {
