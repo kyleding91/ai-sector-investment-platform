@@ -64,6 +64,16 @@ CREATE TABLE IF NOT EXISTS company_metrics (
     last_updated_at         TEXT
 );
 
+-- Spot FX rates for normalizing foreign-filer revenue to USD. One row per
+-- currency; `usd_per_unit` is how many USD 1 unit of the currency buys (so
+-- USD = native * usd_per_unit). Refreshed from yfinance via backend.fx.
+CREATE TABLE IF NOT EXISTS fx_rates (
+    currency     TEXT PRIMARY KEY,         -- ISO code: TWD, KRW, EUR, ...
+    usd_per_unit REAL NOT NULL,            -- 1 unit of currency = this many USD
+    as_of        TEXT,                     -- rate observation date (YYYY-MM-DD)
+    fetched_at   TEXT
+);
+
 -- Stage 3: LLM-generated structured insights. Full history kept; the API
 -- serves the latest generation per (scope_type, scope_id).
 CREATE TABLE IF NOT EXISTS insights (
@@ -122,9 +132,29 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+# Columns added after the original CREATE TABLE shipped. `CREATE TABLE IF NOT
+# EXISTS` won't alter an existing table, so add any missing ones idempotently.
+_MIGRATIONS: dict[str, list[tuple[str, str]]] = {
+    "company_metrics": [
+        ("revenue_latest_usd", "REAL"),   # native revenue converted to USD
+        ("fx_rate", "REAL"),              # usd_per_unit used for the conversion
+        ("fx_rate_asof", "TEXT"),         # observation date of that rate
+    ],
+}
+
+
+def _apply_migrations(conn: sqlite3.Connection) -> None:
+    for table, cols in _MIGRATIONS.items():
+        existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in cols:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+
 def init_schema() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        _apply_migrations(conn)
 
 
 def set_meta(key: str, value: str) -> None:

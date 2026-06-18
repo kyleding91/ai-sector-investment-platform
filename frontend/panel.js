@@ -205,6 +205,21 @@
     const opmBasis = m.operating_margin_basis === 'NetIncome/Revenue (fallback)'
       ? 'Net income / revenue (Op. income N/A)' : 'Operating income / revenue';
     const src = (m.sources || 'yfinance') + (m.last_updated_at ? ' · ' + new Date(m.last_updated_at).toLocaleDateString() : '');
+    // Foreign filers: show native revenue big, with a USD spot-converted approximation.
+    const isForeign = ccy !== 'USD';
+    const hasUsd = isForeign && m.revenue_latest_usd != null;
+    const revSub = hasUsd
+      ? `${m.revenue_latest_period || ''} · ≈ ${fmtMoney(m.revenue_latest_usd, 'USD')}`
+      : (m.revenue_latest_period || '');
+    const fxRate = m.fx_rate;
+    const fxBits = hasUsd
+      ? `at 1 ${escapeHtml(ccy)} = $${Number(fxRate).toPrecision(4)}${m.fx_rate_asof ? ' (' + escapeHtml(m.fx_rate_asof) + ')' : ''}`
+      : '';
+    const caveat = isForeign
+      ? (hasUsd
+          ? `Revenue reported in ${escapeHtml(ccy)} (foreign filer); USD figure is a spot-rate conversion ${fxBits} for comparison, not a reported figure. Margins & CAGR are currency-neutral.`
+          : `Revenue reported in ${escapeHtml(ccy)} (foreign filer); margins & CAGR are currency-neutral.`)
+      : '';
     return `
       <div class="mb-4">
         <div class="flex items-center justify-between mb-1.5">
@@ -212,12 +227,12 @@
           <div class="text-[10px] text-gray-400">source: ${escapeHtml(src)}</div>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-          ${tile('Revenue', fmtMoney(m.revenue_latest, ccy), m.revenue_latest_period || '')}
+          ${tile('Revenue', fmtMoney(m.revenue_latest, ccy), revSub)}
           ${tile('Gross margin', pct(m.gross_margin), 'Latest FY')}
           ${tile('Operating margin', pct(m.operating_margin), 'Latest FY', opmBasis)}
           ${tile('Revenue 3Y CAGR', m.revenue_3y_cagr == null ? '—' : fmtPct(m.revenue_3y_cagr), m.revenue_cagr_window || '3-year compound')}
         </div>
-        ${ccy !== 'USD' ? `<div class="text-[11px] text-amber-700 mt-1">Revenue reported in ${escapeHtml(ccy)} (foreign filer); margins & CAGR are currency-neutral.</div>` : ''}
+        ${caveat ? `<div class="text-[11px] text-amber-700 mt-1">${caveat}</div>` : ''}
       </div>`;
   }
 
