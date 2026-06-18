@@ -87,6 +87,10 @@
         <option value="zero">0% (absolute)</option>
       </select>
     </label>
+    <button id="manage-btn" type="button"
+      class="ml-auto px-3 py-1.5 border border-gray-300 rounded text-sm bg-white hover:bg-gray-50">
+      ⚙ Manage watchlist
+    </button>
   </div>
 
   <div class="mb-4">
@@ -122,6 +126,53 @@
   </div>
   <div id="panel-body" class="panel-body"></div>
 </aside>
+
+<!-- Watchlist admin modal -->
+<div id="manage-backdrop" class="panel-backdrop" onclick="closeManage()"></div>
+<div id="manage-modal"
+  class="fixed left-1/2 top-1/2 z-[70] w-[min(640px,95vw)] max-h-[88vh] -translate-x-1/2 -translate-y-1/2
+         overflow-y-auto rounded-lg bg-white shadow-2xl hidden">
+  <div class="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-5 py-3">
+    <div class="text-lg font-bold">Manage watchlist</div>
+    <button onclick="closeManage()" class="text-2xl leading-none text-gray-500 hover:text-gray-900">&times;</button>
+  </div>
+  <div class="px-5 py-4">
+    <!-- Add form -->
+    <form id="add-form" class="mb-5 rounded-md border border-gray-200 bg-gray-50 p-4">
+      <div class="mb-2 text-sm font-semibold text-gray-700">Add a company</div>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="text-xs text-gray-600">Ticker (display)
+          <input id="add-ticker" required placeholder="QCOM"
+            class="mt-0.5 w-full rounded border px-2 py-1 text-sm uppercase" />
+        </label>
+        <label class="text-xs text-gray-600">Yahoo ticker <span class="text-gray-400">(optional)</span>
+          <input id="add-yahoo" placeholder="defaults to display ticker"
+            class="mt-0.5 w-full rounded border px-2 py-1 text-sm" />
+        </label>
+        <label class="col-span-2 text-xs text-gray-600">Company name
+          <input id="add-name" required placeholder="QUALCOMM Incorporated"
+            class="mt-0.5 w-full rounded border px-2 py-1 text-sm" />
+        </label>
+        <label class="text-xs text-gray-600">Segment
+          <select id="add-segment" required class="mt-0.5 w-full rounded border px-2 py-1 text-sm"></select>
+        </label>
+        <label class="text-xs text-gray-600">Notes <span class="text-gray-400">(optional)</span>
+          <input id="add-notes" class="mt-0.5 w-full rounded border px-2 py-1 text-sm" />
+        </label>
+      </div>
+      <div class="mt-3 flex items-center gap-3">
+        <button type="submit" id="add-submit"
+          class="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+          Add &amp; pull prices
+        </button>
+        <span id="add-msg" class="text-xs"></span>
+      </div>
+    </form>
+    <!-- Current companies -->
+    <div class="mb-2 text-sm font-semibold text-gray-700">Current watchlist</div>
+    <div id="manage-list" class="text-sm text-gray-500">Loading…</div>
+  </div>
+</div>
 
 <script src="/panel.js"></script>
 <script>
@@ -420,6 +471,141 @@
   document.addEventListener('click', (e) => {
     if (!searchResults.contains(e.target) && e.target !== searchBox) searchResults.classList.add('hidden');
   });
+
+  // ---- Watchlist admin modal ----------------------------------------------
+  let SEGMENTS_CACHE = null;
+
+  async function fetchSegments() {
+    if (SEGMENTS_CACHE) return SEGMENTS_CACHE;
+    const j = await fetch(apiUrl('/api/segments')).then(r => r.json());
+    SEGMENTS_CACHE = j.segments || [];
+    return SEGMENTS_CACHE;
+  }
+
+  function segmentOptions(segs, selected) {
+    return segs.map(s =>
+      `<option value="${escapeHtml(s)}"${s === selected ? ' selected' : ''}>${escapeHtml(s)}</option>`
+    ).join('');
+  }
+
+  async function openManage() {
+    const segs = await fetchSegments();
+    document.getElementById('add-segment').innerHTML = segmentOptions(segs, null);
+    document.getElementById('add-msg').textContent = '';
+    document.getElementById('manage-modal').classList.remove('hidden');
+    document.getElementById('manage-backdrop').classList.add('open');
+    renderManageList();
+  }
+  function closeManage() {
+    document.getElementById('manage-modal').classList.add('hidden');
+    document.getElementById('manage-backdrop').classList.remove('open');
+  }
+  window.closeManage = closeManage;
+
+  async function renderManageList() {
+    const el = document.getElementById('manage-list');
+    el.textContent = 'Loading…';
+    try {
+      const [all, segs] = await Promise.all([
+        fetch(apiUrl('/api/companies')).then(r => r.json()).then(j => j.companies || []),
+        fetchSegments(),
+      ]);
+      // Benchmarks (segment "Benchmark") are structural — hide them from admin.
+      const companies = all.filter(c => c.segment !== 'Benchmark');
+      if (!companies.length) { el.textContent = 'No companies.'; return; }
+      el.innerHTML = companies.map(c => `
+        <div class="flex items-center gap-2 border-b border-gray-100 py-1.5" data-row="${escapeHtml(c.ticker)}">
+          <span class="w-16 font-mono font-semibold">${escapeHtml(c.ticker)}</span>
+          <span class="flex-1 truncate text-gray-600" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+          <select class="rebucket rounded border px-1 py-0.5 text-xs" data-ticker="${escapeHtml(c.ticker)}">
+            ${segmentOptions(segs, c.segment)}
+          </select>
+          <button class="remove rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50"
+            data-ticker="${escapeHtml(c.ticker)}" data-name="${escapeHtml(c.name)}">Remove</button>
+        </div>`).join('');
+      el.querySelectorAll('.rebucket').forEach(s => s.addEventListener('change', onRebucket));
+      el.querySelectorAll('.remove').forEach(b => b.addEventListener('click', onRemove));
+    } catch (e) {
+      el.textContent = 'Failed to load: ' + e.message;
+    }
+  }
+
+  async function onRebucket(e) {
+    const ticker = e.target.dataset.ticker;
+    const segment = e.target.value;
+    e.target.disabled = true;
+    try {
+      const res = await fetch(apiUrl('/api/watchlist/' + encodeURIComponent(ticker)), {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segment }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+      await load();  // re-color heat map with new layer placement
+    } catch (err) {
+      alert('Re-bucket failed: ' + err.message);
+      renderManageList();
+    } finally {
+      e.target.disabled = false;
+    }
+  }
+
+  async function onRemove(e) {
+    const { ticker, name } = e.target.dataset;
+    if (!confirm(`Remove ${ticker} (${name}) and its price history from the watchlist?`)) return;
+    e.target.disabled = true;
+    try {
+      const res = await fetch(apiUrl('/api/watchlist/' + encodeURIComponent(ticker)), { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+      await load();
+      renderManageList();
+    } catch (err) {
+      alert('Remove failed: ' + err.message);
+      e.target.disabled = false;
+    }
+  }
+
+  document.getElementById('add-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('add-msg');
+    const btn = document.getElementById('add-submit');
+    const body = {
+      ticker: document.getElementById('add-ticker').value.trim().toUpperCase(),
+      yahoo_ticker: document.getElementById('add-yahoo').value.trim(),
+      name: document.getElementById('add-name').value.trim(),
+      segment: document.getElementById('add-segment').value,
+      notes: document.getElementById('add-notes').value.trim(),
+    };
+    if (!body.ticker || !body.name) { msg.textContent = 'Ticker and name are required.'; msg.className = 'text-xs text-red-600'; return; }
+    btn.disabled = true;
+    msg.className = 'text-xs text-gray-500';
+    msg.textContent = `Adding ${body.ticker} and pulling prices…`;
+    try {
+      const res = await fetch(apiUrl('/api/watchlist'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.detail || res.statusText);
+      if (j.priced) {
+        msg.className = 'text-xs text-green-700';
+        msg.textContent = `Added ${j.ticker} — ${j.price_rows} price rows pulled.`;
+      } else {
+        msg.className = 'text-xs text-amber-700';
+        msg.textContent = `Added ${j.ticker}, but price pull returned no data${j.price_error ? ' (' + j.price_error + ')' : ''}. It will show N/A until refreshed.`;
+      }
+      e.target.reset();
+      await load();          // refresh heat map (new row appears)
+      renderManageList();    // refresh the in-modal list
+    } catch (err) {
+      msg.className = 'text-xs text-red-600';
+      msg.textContent = 'Failed: ' + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('manage-btn').addEventListener('click', openManage);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeManage(); });
 
   load();
 </script>

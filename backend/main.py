@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-from backend.companies import BENCHMARK_TICKERS, COMPANIES, PRIMARY_BENCHMARK
+from backend.companies import BENCHMARK_TICKERS, PRIMARY_BENCHMARK, SEGMENTS
 from backend.db import connect, get_meta
 from backend.returns import HORIZONS_YEARS, compute_table
 
@@ -25,7 +26,7 @@ app = FastAPI(title="AI Sector Investment Platform")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET"],
+    allow_methods=["*"],   # GET for reads; POST/DELETE for watchlist admin
     allow_headers=["*"],
 )
 
@@ -92,11 +93,17 @@ def returns() -> dict[str, Any]:
 
 
 def _company_meta(ticker: str) -> tuple[str, str, str] | None:
-    """(yahoo_ticker, name, segment) for a display ticker, or None."""
-    for t, y, n, s, _notes in COMPANIES:
-        if t.upper() == ticker.upper():
-            return (y, n, s)
-    return None
+    """(yahoo_ticker, name, segment) for a display ticker, or None.
+
+    Reads the live `companies` table (not the seed list) so companies added at
+    runtime via the watchlist admin also resolve for snapshots.
+    """
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT yahoo_ticker, name, segment FROM companies WHERE ticker=?",
+            (ticker.upper(),),
+        ).fetchone()
+    return (row[0], row[1], row[2]) if row else None
 
 
 @app.get("/api/snapshot/{ticker}")
@@ -264,6 +271,67 @@ def search_filings(q: str = "", limit: int = 25, ticker: str | None = None) -> d
         return {"q": query, "count": 0, "results": [], "indexed": False}
     results = fts_search(query, limit=limit, ticker=ticker)
     return {"q": query, "count": len(results), "results": results}
+
+
+# ---------------------------------------------------------------------------
+# Watchlist administration — add / remove / re-bucket companies in the live DB.
+# Mutates the `companies` table (and pulls prices on add) so the heat map can be
+# curated from the UI without hand-editing backend/companies.py.
+# ---------------------------------------------------------------------------
+
+
+class AddCompanyBody(BaseModel):
+    ticker: str
+    name: str
+    segment: str
+    yahoo_ticker: str = ""
+    notes: str = ""
+
+
+class RebucketBody(BaseModel):
+    segment: str
+
+
+@app.get("/api/segments")
+def segments() -> dict[str, Any]:
+    """Value-chain segments available for bucketing (excludes 'Benchmark')."""
+    return {"segments": list(SEGMENTS)}
+
+
+@app.post("/api/watchlist")
+def watchlist_add(body: AddCompanyBody) -> dict[str, Any]:
+    """Add a company to the watchlist and pull its price history."""
+    from backend.watchlist import WatchlistError, add_company
+    try:
+        result = add_company(
+            ticker=body.ticker, name=body.name, segment=body.segment,
+            yahoo_ticker=body.yahoo_ticker, notes=body.notes,
+        )
+    except WatchlistError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"ok": True, **result}
+
+
+@app.patch("/api/watchlist/{ticker}")
+def watchlist_rebucket(ticker: str, body: RebucketBody) -> dict[str, Any]:
+    """Move a company to a different value-chain segment."""
+    from backend.watchlist import WatchlistError, rebucket_company
+    try:
+        result = rebucket_company(ticker, body.segment)
+    except WatchlistError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"ok": True, **result}
+
+
+@app.delete("/api/watchlist/{ticker}")
+def watchlist_remove(ticker: str) -> dict[str, Any]:
+    """Remove a company and its derived data (prices, metrics, facts)."""
+    from backend.watchlist import WatchlistError, remove_company
+    try:
+        result = remove_company(ticker)
+    except WatchlistError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"ok": True, **result}
 
 
 # Serve the static frontend at "/" — keep LAST so /api/* takes precedence.
