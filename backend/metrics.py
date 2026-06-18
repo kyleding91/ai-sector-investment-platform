@@ -56,6 +56,41 @@ def _facts_by_concept(ticker: str) -> dict[str, list[tuple[str, float]]]:
     return out
 
 
+_SOURCE_LABEL = {
+    "edgar_xbrl": "SEC EDGAR XBRL",
+    "yfinance": "yfinance",
+    "manual": "manual",
+}
+_SOURCE_PRIORITY = {"edgar_xbrl": 3, "yfinance": 2, "manual": 1}
+
+
+def _winning_sources(ticker: str) -> str:
+    """Human-readable list of the sources that actually back this ticker's facts.
+
+    Mirrors `_facts_by_concept`'s per-period priority (edgar_xbrl > yfinance >
+    manual), so the label reflects the data the metrics were computed from.
+    Ordered highest-priority first, e.g. 'SEC EDGAR XBRL + yfinance'.
+    """
+    facts = _facts_by_concept(ticker)  # already source-deduped
+    # Re-derive which source won each (concept, period) from the raw rows.
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT period_end, concept, source FROM fundamentals "
+            "WHERE ticker=? AND period_type='FY' AND value IS NOT NULL",
+            (ticker,),
+        ).fetchall()
+    best: dict[tuple[str, str], str] = {}
+    for period_end, concept, source in rows:
+        key = (concept, period_end)
+        cur = best.get(key)
+        if cur is None or _SOURCE_PRIORITY.get(source, 0) > _SOURCE_PRIORITY.get(cur, 0):
+            best[key] = source
+    winners = set(best.values())
+    ordered = sorted(winners, key=lambda s: _SOURCE_PRIORITY.get(s, 0), reverse=True)
+    labels = [_SOURCE_LABEL.get(s, s) for s in ordered]
+    return " + ".join(labels) if labels else "yfinance"
+
+
 def _financial_currency(ticker: str) -> str:
     """Reporting currency of the monetary facts (from the Revenue row's unit)."""
     with connect() as conn:
@@ -100,7 +135,7 @@ def compute_metrics_for(ticker: str) -> dict:
         "gross_margin": None,
         "revenue_3y_cagr": None, "revenue_cagr_window": None,
         "eps_3y_cagr": None, "eps_cagr_window": None, "eps_cagr_caveat": None,
-        "sources": "yfinance",
+        "sources": _winning_sources(ticker),
         "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 

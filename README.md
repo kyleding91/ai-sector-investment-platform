@@ -33,6 +33,7 @@ pip install -r requirements.txt
 python -m backend.seed                    # companies.py -> SQLite
 python -m backend.etl refresh             # ~11Y of daily closes from Yahoo (~1 min)
 python -m backend.fundamentals refresh all  # income-statement facts from yfinance
+python -m backend.xbrl refresh all          # authoritative SEC EDGAR XBRL facts (supersede yfinance)
 python -m backend.metrics refresh all     # derive revenue/margin/CAGR rollups
 python -m scripts.seed_insights           # hand-seeded illustrative deep-dive panels
 
@@ -119,6 +120,31 @@ python -m backend.search status            # doc count + last-indexed time
 
 Rebuild the index after `python -m backend.filings refresh` pulls new filings.
 
+### EDGAR XBRL fundamentals — authoritative second source (Phase 6)
+
+yfinance gives a fast income statement, but the authoritative numbers live in each
+filer's XBRL data at SEC EDGAR. `backend/xbrl.py` pulls the `companyfacts` API and writes
+the same canonical concepts (Revenue, NetIncome, OperatingIncome, GrossProfit, Diluted/Basic
+EPS) into the shared `fundamentals` table tagged `source='edgar_xbrl'`. `metrics.py` already
+prioritizes `edgar_xbrl` over `yfinance` for the same fiscal period, so XBRL transparently
+supersedes yfinance and the deep-dive panel's "source:" line reflects what was actually used
+(e.g. `SEC EDGAR XBRL` or `SEC EDGAR XBRL + yfinance`).
+
+```bash
+python -m backend.xbrl refresh all          # whole watchlist
+python -m backend.xbrl refresh NVDA         # one ticker
+python -m backend.xbrl compare NVDA         # XBRL vs yfinance, side-by-side with % delta
+python -m backend.xbrl show NVDA            # print stored edgar_xbrl facts
+```
+
+Coverage notes: a concept's history can be split across us-gaap tags by era (NVDA reports
+revenue under both `Revenues` and `RevenueFromContractWithCustomerExcludingAssessedTax`) — the
+tags are **unioned** so coverage is complete. Foreign private issuers file 20-F under the IFRS
+taxonomy (`ifrs-full`), so TSM/UMC/GFS are mapped there and reported in their statement currency
+(TSM/UMC in TWD, GFS in USD) to match the existing yfinance rows. yfinance's month-end
+fiscal-year convention is matched by snapping each XBRL end-date to the nearest stored period.
+Samsung (005930) and SK hynix (000660) don't file with the SEC and stay yfinance-only.
+
 ## Architecture
 
 Local SQLite (`data/ai_stocks.db`) holds company metadata, daily adjusted closes, raw
@@ -136,7 +162,7 @@ Claude with web search to produce schema-validated `StockPanel` deep dives.
 
 ```
 backend/   companies.py · db.py · seed.py · etl.py · returns.py · fundamentals.py ·
-           metrics.py · insights.py · edgar.py · filings.py · filing_insights.py · main.py
+           xbrl.py · metrics.py · insights.py · edgar.py · filings.py · filing_insights.py · main.py
 frontend/  index.html · stock.html · panel.js
 scripts/   seed_insights.py   (hand-seeded illustrative panels)
 data/      ai_stocks.db   (gitignored)
@@ -158,8 +184,9 @@ filings/   <TICKER>/<TYPE>/<period>/  downloaded SEC filings (gitignored)
 |---|---|---|
 | Daily adjusted closes (heat map, return math, 5Y chart) | yfinance → local `prices` | `python -m backend.etl refresh` |
 | Market cap / P/E / dividend yield | live yfinance call per `/api/snapshot/{ticker}` | live (Yahoo retail tier 15+ min delayed) |
-| Income-statement facts (revenue, margins, EPS) | yfinance `financials` → local `fundamentals` | `python -m backend.fundamentals refresh all` |
-| Derived metrics (margin, CAGR, key metric) | computed from `fundamentals` → `company_metrics` | `python -m backend.metrics refresh all` |
+| Income-statement facts (revenue, margins, EPS) | yfinance `financials` → local `fundamentals` (`source='yfinance'`) | `python -m backend.fundamentals refresh all` |
+| Income-statement facts (authoritative second source) | SEC EDGAR XBRL `companyfacts` → `fundamentals` (`source='edgar_xbrl'`) | `python -m backend.xbrl refresh all` |
+| Derived metrics (margin, CAGR, key metric) | computed from `fundamentals` (XBRL preferred over yfinance) → `company_metrics` | `python -m backend.metrics refresh all` |
 | Stock deep-dive insight panels | Claude API (web search) → `insights` | `python -m backend.insights refresh all` |
 | SEC filings (10-K/10-Q/8-K, 20-F/6-K) | SEC EDGAR → `filings/` + `filings` table | `python -m backend.filings refresh all` |
 
