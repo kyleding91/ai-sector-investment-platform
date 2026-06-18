@@ -46,8 +46,6 @@ from backend.edgar import (
     list_filings,
 )
 
-import time as _time
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FILINGS_DIR = PROJECT_ROOT / "filings"
 SINCE_DATE = "2023-01-01"   # past 3+ years, consistent with the fundamentals window

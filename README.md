@@ -212,6 +212,20 @@ the next `python -m backend.seed`, which re-applies the seed list in
 
 Nothing auto-updates. The "last refreshed" timestamp shows in the heat-map header.
 
+## Development (tests + lint)
+
+```bash
+pip install -r requirements-dev.txt
+pytest          # smoke tests for endpoints + offline extraction/metric helpers
+ruff check .    # lint (config in pyproject.toml)
+```
+
+Tests are offline and don't need `ANTHROPIC_API_KEY`. API smoke tests use FastAPI's
+`TestClient` against the local DB; data-dependent assertions auto-skip on an empty/fresh
+DB so the suite is green either way. `/api/snapshot` is only exercised with a bogus ticker
+to avoid a live yfinance call. Ruff enforces E/F/W/I/B/UP; `E501` (line length) is ignored
+because the watchlist in `backend/companies.py` is a hand-aligned table.
+
 ## Notes & caveats
 
 - **Foreign rows:** Samsung (`005930.KS`) and SK hynix (`000660.KS`) are priced in **KRW**, so

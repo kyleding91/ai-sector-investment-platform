@@ -45,8 +45,8 @@ def companies() -> dict[str, Any]:
         ).fetchall()
     return {
         "companies": [
-            {"ticker": t, "name": n, "segment": s, "layer": l, "notes": notes}
-            for (t, n, s, l, notes) in rows
+            {"ticker": t, "name": n, "segment": s, "layer": lyr, "notes": notes}
+            for (t, n, s, lyr, notes) in rows
         ]
     }
 
@@ -140,6 +140,7 @@ def snapshot(ticker: str) -> dict[str, Any]:
     market_cap = pe_ratio = dividend_yield = currency = None
     try:
         import yfinance as yf
+
         from backend.etl import _SESSION
         tk = yf.Ticker(yahoo_ticker, session=_SESSION) if _SESSION else yf.Ticker(yahoo_ticker)
         fast = tk.fast_info
