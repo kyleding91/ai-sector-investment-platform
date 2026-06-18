@@ -102,6 +102,23 @@ boilerplate/false-positive guards (legal, forward-looking, IR, incorporation lan
 are cached in the `filing_insights` table. Samsung / SK hynix have no SEC filings, so they have no
 block.
 
+### Full-text filing search (Phase 5)
+
+Keyword search across the entire downloaded SEC filings corpus — primary documents plus
+earnings-release / supplement / presentation exhibits — backed by a local SQLite **FTS5**
+index. No LLM and no network at query time; every hit links back to the document on SEC
+EDGAR. A search box on the dashboard returns highlighted snippets; clicking a hit opens that
+company's deep-dive panel.
+
+```bash
+python -m backend.search index            # (re)build the FTS index from filings/
+python -m backend.search search "HBM"      # query from the CLI
+python -m backend.search status            # doc count + last-indexed time
+# API: GET /api/search?q=HBM&limit=25[&ticker=MU]
+```
+
+Rebuild the index after `python -m backend.filings refresh` pulls new filings.
+
 ## Architecture
 
 Local SQLite (`data/ai_stocks.db`) holds company metadata, daily adjusted closes, raw

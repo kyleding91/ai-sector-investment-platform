@@ -237,5 +237,22 @@ def filing_insights_for_ticker(ticker: str) -> dict[str, Any]:
     return {"ticker": t, "exists": True, **rec}
 
 
+@app.get("/api/search")
+def search_filings(q: str = "", limit: int = 25, ticker: str | None = None) -> dict[str, Any]:
+    """Full-text search over the on-disk SEC filings corpus. Returns ranked hits
+    with highlighted snippets that link back to the document on SEC EDGAR. Empty
+    query (or a missing index) yields no results rather than an error.
+    """
+    from backend.search import index_exists, search as fts_search
+
+    query = (q or "").strip()
+    if not query:
+        return {"q": query, "count": 0, "results": []}
+    if not index_exists():
+        return {"q": query, "count": 0, "results": [], "indexed": False}
+    results = fts_search(query, limit=limit, ticker=ticker)
+    return {"q": query, "count": len(results), "results": results}
+
+
 # Serve the static frontend at "/" — keep LAST so /api/* takes precedence.
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
